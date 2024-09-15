@@ -20,7 +20,7 @@ Drag and drop the .7z file to the left pane of Reloaded-II.
 ```
 FFXVI
 └─ data
-   ├─ 0001 (folder for each pack name
+   ├─ 0001 (folder for each pack)
       ├─ <modded files for 0001 goes here>
 ```
 
