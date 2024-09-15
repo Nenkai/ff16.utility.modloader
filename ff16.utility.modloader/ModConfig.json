@@ -1,0 +1,24 @@
+{
+  "ModId": "ff16.utility.modloader",
+  "ModName": "Final Fantasy XVI Mod Loader",
+  "ModAuthor": "Nenkai",
+  "ModVersion": "1.0.0",
+  "ModDescription": "Mod loader for Final Fantasy XVI.",
+  "ModDll": "ff16.utility.modloader.dll",
+  "ModIcon": "Preview.png",
+  "ModR2RManagedDll32": "x86/ff16.utility.modloader.dll",
+  "ModR2RManagedDll64": "x64/ff16.utility.modloader.dll",
+  "ModNativeDll32": "",
+  "ModNativeDll64": "",
+  "IsLibrary": false,
+  "ReleaseMetadataFileName": "ff16.utility.modloader.ReleaseMetadata.json",
+  "PluginData": {},
+  "IsUniversalMod": false,
+  "ModDependencies": [ "reloaded.sharedlib.hooks" ],
+  "OptionalDependencies": [],
+  "SupportedAppId": [
+    "ffxvi_demo.exe",
+    "ffxvi.exe"
+  ],
+  "ProjectUrl": ""
+}
