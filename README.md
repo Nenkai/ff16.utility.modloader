@@ -1,6 +1,6 @@
 # ff16.utility.modloader
 
-Mod loader for [Reloaded-II](https://github.com/Reloaded-Project/Reloaded-II).
+[Final Fantasy XVI / 16](https://store.steampowered.com/app/2515020/FINAL_FANTASY_XVI/) Mod loader for [Reloaded-II](https://github.com/Reloaded-Project/Reloaded-II).
 
 ## Usage
 
