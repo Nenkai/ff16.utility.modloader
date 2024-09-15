@@ -148,6 +148,7 @@ public class Mod : ModBase // <= Do not Remove.
             else
             {
                 // overriding
+                _logger.WriteLine($"[{_modConfig.ModId}] Conflict: {modFile.PackPath} is used by {modFile.ModIdOwner}, overwritten by {modId}");
                 modFile.ModIdOwner = modId;
                 modFile.LocalPath = file;
             }

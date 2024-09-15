@@ -33,7 +33,6 @@
       "AssetFileName": "Mod.zip"
     }
   },
-  "PluginData": {},
   "IsUniversalMod": false,
   "ModDependencies": [ "reloaded.sharedlib.hooks" ],
   "OptionalDependencies": [],
