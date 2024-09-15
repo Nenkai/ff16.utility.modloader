@@ -6,6 +6,8 @@ Mod loader for [Reloaded-II](https://github.com/Reloaded-Project/Reloaded-II).
 
 Download the latest mod loader in [Releases](https://github.com/Nenkai/ff16.utility.modloader/releases) (the .7z file).
 
+Add Final Fantasy XVI as a registered game within Reloaded-II.
+
 Drag and drop the .7z file to the left pane of Reloaded-II.
 
 ## Mod File Structure
