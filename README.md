@@ -28,3 +28,9 @@ FFXVI
 > You should preserve `.path` files if they were present.
 
 You can use [**this template mod**](https://github.com/Nenkai/ff16.utility.modloader/releases/tag/template-1.0.0) (which changes some of the main menu ui text to `Hello World`) for reference.
+
+## Discord
+
+<a href="https://discord.gg/D7jhUDfYZh">
+  <img src="https://discordapp.com/api/guilds/1284918645675397140/widget.png?style=banner2" alt="Discord Banner 1"/>
+</a>
