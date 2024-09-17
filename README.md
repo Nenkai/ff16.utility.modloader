@@ -27,7 +27,7 @@ FFXVI
 > [!WARNING]
 > You should preserve `.path` files if they were present.
 
-You can use [**this template mod**](https://github.com/Nenkai/ff16.utility.modloader/releases/tag/template-1.0.0) (which changes some of the main menu ui text to `Hello World`) for reference.
+You can use [**the template mod**](https://github.com/Nenkai/ff16.utility.modloader/releases/) (which changes some of the main menu ui text to `Hello World`) for reference.
 
 ## Discord
 
