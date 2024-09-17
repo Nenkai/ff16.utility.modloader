@@ -10,6 +10,10 @@ Add Final Fantasy XVI as a registered game within Reloaded-II.
 
 Drag and drop the .7z file to the left pane of Reloaded-II.
 
+### Removing Mods
+
+If you'd like to remove mods, head to the game's folder, `data` and remove any `.diff.pac` files.
+
 ## Mod File Structure
 
 1. Follow this guide to create a [Reloaded-II](https://reloaded-project.github.io/Reloaded-II/CreatingMods/) mod.
