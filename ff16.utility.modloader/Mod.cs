@@ -160,6 +160,16 @@ public class Mod : ModBase // <= Do not Remove.
         // Free the pack handles.
         _packManager.Dispose();
 
+        string dataDir = Path.Combine(_appDir, "data");
+        Directory.CreateDirectory(dataDir);
+
+        // Clean up state
+        foreach (var file in Directory.GetFiles(dataDir))
+        {
+            if (file.Contains(".diff."))
+                File.Delete(file);
+        }
+
         foreach (ModPack pack in  _modPackFiles.Values)
         {
             var builder = new FF16PackBuilder();
@@ -177,7 +187,7 @@ public class Mod : ModBase // <= Do not Remove.
             }
 
             _logger.WriteLine($"[{_modConfig.ModId}] Writing '{pack.PackName}' ({pack.Files.Count} files)...");
-            await builder.WriteToAsync(Path.Combine(_appDir, "data", $"{pack.PackName}.pac"));
+            await builder.WriteToAsync(Path.Combine(dataDir, $"{pack.PackName}.pac"));
         }
 
         _logger.WriteLine($"[{_modConfig.ModId}] FFXVI Mod loader initialized with {_modPackFiles.Count} pack(s).", _logger.ColorGreen);
