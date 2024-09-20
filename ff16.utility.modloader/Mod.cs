@@ -54,6 +54,8 @@ public class Mod : ModBase // <= Do not Remove.
 
     private string _appDir;
 
+    public object _loadLock = new object();
+
     public Mod(ModContext context)
     {
         _modLoader = context.ModLoader;
@@ -108,49 +110,55 @@ public class Mod : ModBase // <= Do not Remove.
 
     private void AddModPackFiles(string modId, string packDir)
     {
-        string packName = Path.GetFileName(packDir);
-        List<string> spl = packName.Split('.').ToList();
-        spl.Insert(1, "diff");
-        string diffPackName = string.Join('.', spl);
-
-        if (!_modPackFiles.TryGetValue(diffPackName, out ModPack modPack))
+        lock (_loadLock)
         {
-            modPack = new ModPack();
-            modPack.PackName = diffPackName;
-            _modPackFiles.TryAdd(diffPackName, modPack);
+            string packName = Path.GetFileName(packDir);
+            List<string> spl = packName.Split('.').ToList();
+            spl.Insert(1, "diff");
+            string diffPackName = string.Join('.', spl);
 
-            // If the pack we're adding was a localized one (i.e 0001.diff.en.pac), we need to make sure we also create
-            // a diff pack for the base pack (0001.diff.pac)
-            if (spl.Count > 2)
+            if (!_modPackFiles.TryGetValue(diffPackName, out ModPack modPack))
             {
-                string baseDiffPack = string.Join(".", spl[0], spl[1]);
+                modPack = new ModPack();
+                modPack.PackName = diffPackName;
+                _modPackFiles.TryAdd(diffPackName, modPack);
 
-                var baseModPack = new ModPack();
-                baseModPack.PackName = baseDiffPack;
-                _modPackFiles.TryAdd(baseDiffPack, baseModPack);
-            }
-
-        }
-        
-        foreach (string file in Directory.GetFiles(packDir, "*", SearchOption.AllDirectories))
-        {
-            string packFilePath = Path.GetRelativePath(packDir, file);
-            if (!modPack.Files.TryGetValue(file, out ModFile modFile))
-            {
-                modFile = new ModFile()
+                // If the pack we're adding was a localized one (i.e 0001.diff.en.pac), we need to make sure we also create
+                // a diff pack for the base pack (0001.diff.pac)
+                if (spl.Count > 2)
                 {
-                    ModIdOwner = modId,
-                    LocalPath = file,
-                    PackPath = packFilePath,
-                };
-                modPack.Files.Add(packFilePath, modFile);
+                    string baseDiffPack = string.Join(".", spl[0], spl[1]);
+
+                    var baseModPack = new ModPack();
+                    baseModPack.PackName = baseDiffPack;
+                    _modPackFiles.TryAdd(baseDiffPack, baseModPack);
+                }
             }
-            else
+
+            foreach (string file in Directory.GetFiles(packDir, "*", SearchOption.AllDirectories))
             {
-                // overriding
-                _logger.WriteLine($"[{_modConfig.ModId}] Conflict: {modFile.PackPath} is used by {modFile.ModIdOwner}, overwritten by {modId}", _logger.ColorYellow);
-                modFile.ModIdOwner = modId;
-                modFile.LocalPath = file;
+                string packFilePath = Path.GetRelativePath(packDir, file);
+                if (!modPack.Files.TryGetValue(file, out ModFile modFile))
+                {
+                    modFile = new ModFile()
+                    {
+                        ModIdOwner = modId,
+                        LocalPath = file,
+                        PackPath = packFilePath,
+                    };
+
+                    if (!modPack.Files.TryAdd(packFilePath, modFile))
+                    {
+                        _logger.WriteLine($"[{_modConfig.ModId}] Attempted to add file {modFile.PackPath} ({modId}), couldn't add to queue?", _logger.ColorYellow);
+                    }
+                }
+                else
+                {
+                    // overriding
+                    _logger.WriteLine($"[{_modConfig.ModId}] Conflict: {modFile.PackPath} is used by {modFile.ModIdOwner}, overwritten by {modId}", _logger.ColorYellow);
+                    modFile.ModIdOwner = modId;
+                    modFile.LocalPath = file;
+                }
             }
         }
     }
@@ -161,13 +169,39 @@ public class Mod : ModBase // <= Do not Remove.
         _packManager.Dispose();
 
         string dataDir = Path.Combine(_appDir, "data");
-        Directory.CreateDirectory(dataDir);
+
+        if (!Directory.Exists(dataDir))
+        {
+            try
+            {
+                Directory.CreateDirectory(dataDir);
+            }
+            catch (Exception ex)
+            {
+                _logger.WriteLine($"[{_modConfig.ModId}] data folder in game directory was missing (???), attempted to create it but errored: {ex.Message}", _logger.ColorRed);
+                return;
+            }
+        }
 
         // Clean up state
         foreach (var file in Directory.GetFiles(dataDir))
         {
             if (file.Contains(".diff."))
-                File.Delete(file);
+            {
+                try
+                {
+                    File.Delete(file);
+                }
+                catch (IOException ioEx)
+                {
+                    _logger.WriteLine($"[{_modConfig.ModId}] Attempted to delete {file} for clean state but errored (IOException) - is the game already running as another process? " +
+                        $"Error: {ioEx.Message}", _logger.ColorRed);
+                }
+                catch (Exception ex)
+                {
+                    _logger.WriteLine($"[{_modConfig.ModId}] Attempted to delete {file} for clean state but errored: {ex.Message}", _logger.ColorRed);
+                }
+            }
         }
 
         foreach (ModPack pack in  _modPackFiles.Values)
@@ -187,7 +221,21 @@ public class Mod : ModBase // <= Do not Remove.
             }
 
             _logger.WriteLine($"[{_modConfig.ModId}] Writing '{pack.PackName}' ({pack.Files.Count} files)...");
-            await builder.WriteToAsync(Path.Combine(dataDir, $"{pack.PackName}.pac"));
+
+            try
+            {
+                await builder.WriteToAsync(Path.Combine(dataDir, $"{pack.PackName}.pac"));
+            }
+            catch (IOException ioEx)
+            {
+                _logger.WriteLine($"[{_modConfig.ModId}] Failed to write {pack.PackName} with IOException - is the game already running as another process? Error: {ioEx.Message}", _logger.ColorRed);
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.WriteLine($"[{_modConfig.ModId}] Failed to write {pack.PackName}: {ex.Message}", _logger.ColorRed);
+                return;
+            }
         }
 
         _logger.WriteLine($"[{_modConfig.ModId}] FFXVI Mod loader initialized with {_modPackFiles.Count} pack(s).", _logger.ColorGreen);
