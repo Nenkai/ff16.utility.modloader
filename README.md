@@ -33,6 +33,10 @@ FFXVI
 
 You can use [**the template mod**](https://github.com/Nenkai/ff16.utility.modloader/releases/download/1.0.1/ff16.template.helloworld.zip) (which changes some of the main menu ui text to `Hello World`) for reference.
 
+## Building
+
+You may need to remove the `runtimes` folder after compiling, otherwise could cause conflicts with the game's dstorage.dll (and get stuck on a black screen).
+
 ## Discord
 
 <a href="https://discord.gg/D7jhUDfYZh">
