@@ -50,7 +50,7 @@ public class Mod : ModBase // <= Do not Remove.
     /// </summary>
     private readonly IModConfig _modConfig;
 
-    public FFXVIPackManager _packManager;
+    public FF16ModPackManager _packManager;
 
     private string _appDir;
 
@@ -73,15 +73,41 @@ public class Mod : ModBase // <= Do not Remove.
 #if DEBUG
         Debugger.Launch();
 #endif
-
         string appLocation = _modLoader.GetAppConfig().AppLocation;
         _appDir = Path.GetDirectoryName(appLocation);
 
-        _packManager = new FFXVIPackManager(_modConfig, _modLoader, _logger, _configuration);
-        if (!_packManager.Initialize(Path.Combine(_appDir, "data")))
-            _logger.WriteLine($"[{context.ModConfig.ModId}] Failed to initialize. Mods will still be attempted to be loaded.", _logger.ColorRed);
+        // Clean up state
+        string dataDir = Path.Combine(_appDir, "data");
+        foreach (var file in Directory.GetFiles(dataDir))
+        {
+            if (file.Contains(".diff."))
+            {
+                try
+                {
+                    _logger.WriteLine($"[{_modConfig.ModId}] Deleting '{Path.GetFileName(file)}' for clean state");
+                    File.Delete(file);
+                }
+                catch (IOException ioEx)
+                {
+                    _logger.WriteLine($"[{_modConfig.ModId}] Attempted to delete {file} for clean state but errored (IOException) - is the game already running as another process? " +
+                        $"Error: {ioEx.Message}", _logger.ColorRed);
+                }
+                catch (Exception ex)
+                {
+                    _logger.WriteLine($"[{_modConfig.ModId}] Attempted to delete {file} for clean state but errored: {ex.Message}", _logger.ColorRed);
+                }
+            }
+        }
 
-        _modLoader.AddOrReplaceController<IFFXVIPackManager>(_owner, _packManager);
+
+        _packManager = new FF16ModPackManager(_modConfig, _modLoader, _logger, _configuration);
+        if (!_packManager.Initialize(Path.Combine(_appDir, "data")))
+        {
+            _logger.WriteLine($"[{context.ModConfig.ModId}] Pack manager failed to initialize.", _logger.ColorRed);
+            return;
+        }
+
+        _modLoader.AddOrReplaceController<IFF16ModPackManager>(_owner, _packManager);
 
         _modLoader.ModLoading += ModLoading;
         _modLoader.OnModLoaderInitialized += OnAllModsLoaded;
@@ -163,13 +189,12 @@ public class Mod : ModBase // <= Do not Remove.
         }
     }
 
-    private async void OnAllModsLoaded()
+    private void OnAllModsLoaded()
     {
         // Free the pack handles.
-        _packManager.Dispose();
+        _packManager?.Dispose();
 
         string dataDir = Path.Combine(_appDir, "data");
-
         if (!Directory.Exists(dataDir))
         {
             try
@@ -180,27 +205,6 @@ public class Mod : ModBase // <= Do not Remove.
             {
                 _logger.WriteLine($"[{_modConfig.ModId}] data folder in game directory was missing (???), attempted to create it but errored: {ex.Message}", _logger.ColorRed);
                 return;
-            }
-        }
-
-        // Clean up state
-        foreach (var file in Directory.GetFiles(dataDir))
-        {
-            if (file.Contains(".diff."))
-            {
-                try
-                {
-                    File.Delete(file);
-                }
-                catch (IOException ioEx)
-                {
-                    _logger.WriteLine($"[{_modConfig.ModId}] Attempted to delete {file} for clean state but errored (IOException) - is the game already running as another process? " +
-                        $"Error: {ioEx.Message}", _logger.ColorRed);
-                }
-                catch (Exception ex)
-                {
-                    _logger.WriteLine($"[{_modConfig.ModId}] Attempted to delete {file} for clean state but errored: {ex.Message}", _logger.ColorRed);
-                }
             }
         }
 
@@ -224,7 +228,7 @@ public class Mod : ModBase // <= Do not Remove.
 
             try
             {
-                await builder.WriteToAsync(Path.Combine(dataDir, $"{pack.PackName}.pac"));
+                builder.WriteToAsync(Path.Combine(dataDir, $"{pack.PackName}.pac")).GetAwaiter().GetResult();
             }
             catch (IOException ioEx)
             {

@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace ff16.utility.modloader;
 
-interface IFFXVIPackManager
+interface IFF16ModPackManager
 {
     public bool Initialize(string gameDataDir);
 }
