@@ -46,14 +46,6 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
     <PackageReference Include="Reloaded.Mod.Interfaces" Version="2.4.0" ExcludeAssets="runtime" />
     <PackageReference Include="Reloaded.SharedLib.Hooks" Version="1.9.0" />
-
-	<!-- 
-	We need a way to make sure FF16Tools.Pack's Vortice does not output native directstorage dlls. 
-    Why? Because since we are running within the game we can simply use the game's through LoadLibrary.
-	
-	Only decent way I found was to also reference Vortice.DirectStorage here, and exclude all assets.
-	-->
-	<PackageReference Include="Vortice.DirectStorage" Version="3.6.2" ExcludeAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
