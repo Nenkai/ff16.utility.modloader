@@ -57,4 +57,27 @@
     </None>
   </ItemGroup>
 
+	<!-- Get rid of dstorage dlls produced, we run inside the game so we don't need these -->
+	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
+		<Exec Command="del $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\win-x64\native\dstorage.dll" />
+		<Exec Command="del $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\win-x64\native\dstoragecore.dll" />
+		<Exec Command="del $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\win-x86\native\dstorage.dll" />
+		<Exec Command="del $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\win-x86\native\dstoragecore.dll" />
+		<Exec Command="del $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\win-arm64\native\dstorage.dll" />
+		<Exec Command="del $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\win-arm64\native\dstoragecore.dll" />
+		<Exec Command="del $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\win-arm\native\dstorage.dll" />
+		<Exec Command="del $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\win-arm\native\dstoragecore.dll" />
+
+		<!-- We don't need all these (produced by sqlite) -->
+		<Exec Command="rmdir /s /q $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\browser-wasm" />
+		<Exec Command="rmdir /s /q $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\linux-ppc64le" />
+		<Exec Command="rmdir /s /q $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\linux-musl-x64" />
+		<Exec Command="rmdir /s /q $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\linux-musl-arm64" />
+		<Exec Command="rmdir /s /q $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\linux-musl-arm" />
+		<Exec Command="rmdir /s /q $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\linux-mips64" />
+		<Exec Command="rmdir /s /q $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\linux-s390x" />
+		<Exec Command="rmdir /s /q $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\linux-armel" />
+		<Exec Command="rmdir /s /q $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\maccatalyst-arm64" />
+		<Exec Command="rmdir /s /q $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\maccatalyst-x64" />
+	</Target>
 </Project>
