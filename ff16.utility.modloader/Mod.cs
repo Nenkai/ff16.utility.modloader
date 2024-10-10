@@ -1,16 +1,19 @@
-﻿using ff16.utility.modloader.Configuration;
-using ff16.utility.modloader.Template;
+﻿using System.Diagnostics;
+
+using CommunityToolkit.HighPerformance.Buffers;
 
 using Reloaded.Hooks.ReloadedII.Interfaces;
 using Reloaded.Mod.Interfaces;
 using Reloaded.Mod.Interfaces.Internal;
 
-using FF16Tools.Pack.Packing;
+using FF16Tools.Pack;
+using FF16Tools.Files.Nex;
+using FF16Tools.Files.Nex.Entities;
 
-using System.Diagnostics;
-using Vortice.Win32;
-using CommunityToolkit.HighPerformance;
-using System.Collections.Generic;
+using ff16.utility.modloader.Configuration;
+using ff16.utility.modloader.Template;
+using FF16Tools.Files;
+
 
 namespace ff16.utility.modloader;
 
@@ -50,11 +53,10 @@ public class Mod : ModBase // <= Do not Remove.
     /// </summary>
     private readonly IModConfig _modConfig;
 
-    public FF16ModPackManager _packManager;
+    public FF16ModPackManager _modPackManager;
 
     private string _appDir;
-
-    public object _loadLock = new object();
+    private string _tempDir;
 
     public Mod(ModContext context)
     {
@@ -73,10 +75,32 @@ public class Mod : ModBase // <= Do not Remove.
 #if DEBUG
         Debugger.Launch();
 #endif
+
         string appLocation = _modLoader.GetAppConfig().AppLocation;
         _appDir = Path.GetDirectoryName(appLocation);
+        _tempDir = Path.Combine(_modLoader.GetDirectoryForModId(_modConfig.ModId), "staging");
+        bool isDemo = _modLoader.GetAppConfig().AppId == "ffxvi_demo.exe";
 
-        // Clean up state
+        ClearDiffPackState();
+
+        _modPackManager = new FF16ModPackManager(_modConfig, _modLoader, _logger, _configuration);
+        if (!_modPackManager.Initialize(Path.Combine(_appDir, "data"), _tempDir, isDemo: isDemo))
+        {
+            _logger.WriteLine($"[{context.ModConfig.ModId}] Pack manager failed to initialize.", _logger.ColorRed);
+            return;
+        }
+
+        _modLoader.AddOrReplaceController<IFF16ModPackManager>(_owner, _modPackManager);
+
+        _modLoader.ModLoading += ModLoading;
+        _modLoader.OnModLoaderInitialized += OnAllModsLoaded;
+    }
+
+    /// <summary>
+    /// Removes any left-over .diff packs in the game's data directory.
+    /// </summary>
+    private void ClearDiffPackState()
+    {
         string dataDir = Path.Combine(_appDir, "data");
         foreach (var file in Directory.GetFiles(dataDir))
         {
@@ -98,101 +122,21 @@ public class Mod : ModBase // <= Do not Remove.
                 }
             }
         }
-
-
-        _packManager = new FF16ModPackManager(_modConfig, _modLoader, _logger, _configuration);
-        if (!_packManager.Initialize(Path.Combine(_appDir, "data")))
-        {
-            _logger.WriteLine($"[{context.ModConfig.ModId}] Pack manager failed to initialize.", _logger.ColorRed);
-            return;
-        }
-
-        _modLoader.AddOrReplaceController<IFF16ModPackManager>(_owner, _packManager);
-
-        _modLoader.ModLoading += ModLoading;
-        _modLoader.OnModLoaderInitialized += OnAllModsLoaded;
     }
-
-    private Dictionary<string, ModPack> _modPackFiles = new();
 
     private void ModLoading(IModV1 mod, IModConfigV1 modConfig)
     {
-        var modDir = Path.Combine(_modLoader.GetDirectoryForModId(modConfig.ModId), @"FFXVI\data");
+        var modDir = Path.Combine(_modLoader.GetDirectoryForModId(modConfig.ModId), @"FFXVI/data");
         if (!Directory.Exists(modDir))
             return;
 
-        foreach (var dir in Directory.GetDirectories(modDir))
-        {
-            if (Directory.Exists(dir))
-            {
-                string possiblePackName = Path.GetFileName(dir);
-                if (_packManager.PackExists(possiblePackName))
-                {
-                    AddModPackFiles(modConfig.ModId, dir);
-                }
-            }
-        }
-    }
-
-    private void AddModPackFiles(string modId, string packDir)
-    {
-        lock (_loadLock)
-        {
-            string packName = Path.GetFileName(packDir);
-            List<string> spl = packName.Split('.').ToList();
-            spl.Insert(1, "diff");
-            string diffPackName = string.Join('.', spl);
-
-            if (!_modPackFiles.TryGetValue(diffPackName, out ModPack modPack))
-            {
-                modPack = new ModPack();
-                modPack.PackName = diffPackName;
-                _modPackFiles.TryAdd(diffPackName, modPack);
-
-                // If the pack we're adding was a localized one (i.e 0001.diff.en.pac), we need to make sure we also create
-                // a diff pack for the base pack (0001.diff.pac)
-                if (spl.Count > 2)
-                {
-                    string baseDiffPack = string.Join(".", spl[0], spl[1]);
-
-                    var baseModPack = new ModPack();
-                    baseModPack.PackName = baseDiffPack;
-                    _modPackFiles.TryAdd(baseDiffPack, baseModPack);
-                }
-            }
-
-            foreach (string file in Directory.GetFiles(packDir, "*", SearchOption.AllDirectories))
-            {
-                string packFilePath = Path.GetRelativePath(packDir, file);
-                if (!modPack.Files.TryGetValue(file, out ModFile modFile))
-                {
-                    modFile = new ModFile()
-                    {
-                        ModIdOwner = modId,
-                        LocalPath = file,
-                        PackPath = packFilePath,
-                    };
-
-                    if (!modPack.Files.TryAdd(packFilePath, modFile))
-                    {
-                        _logger.WriteLine($"[{_modConfig.ModId}] Attempted to add file {modFile.PackPath} ({modId}), couldn't add to queue?", _logger.ColorYellow);
-                    }
-                }
-                else
-                {
-                    // overriding
-                    _logger.WriteLine($"[{_modConfig.ModId}] Conflict: {modFile.PackPath} is used by {modFile.ModIdOwner}, overwritten by {modId}", _logger.ColorYellow);
-                    modFile.ModIdOwner = modId;
-                    modFile.LocalPath = file;
-                }
-            }
-        }
+        _modPackManager.RegisterModDirectory(modConfig.ModId, modDir);
     }
 
     private void OnAllModsLoaded()
     {
-        // Free the pack handles.
-        _packManager?.Dispose();
+        if (_configuration.AddMainMenuModInfo)
+            ApplyMainMenuModInfo();
 
         string dataDir = Path.Combine(_appDir, "data");
         if (!Directory.Exists(dataDir))
@@ -208,42 +152,107 @@ public class Mod : ModBase // <= Do not Remove.
             }
         }
 
-        foreach (ModPack pack in  _modPackFiles.Values)
+        _modPackManager.Apply();
+
+        if (Directory.Exists(_tempDir))
+            Directory.Delete(_tempDir, recursive: true);
+    }
+
+    public void ApplyMainMenuModInfo()
+    {
+        const string uiNxdPath = "nxd/ui.nxd";
+
+        FF16PackPathUtil.TryGetPackNameForPath(uiNxdPath, out string packName, out _, _modPackManager.IsDemo);
+
+        string tempModLoaderDataDir = Path.Combine(_tempDir, "data");
+        try
         {
-            var builder = new FF16PackBuilder();
-
-            if (pack.Files.TryGetValue(".path", out ModFile pathFile))
-                builder.RegisterPathFile(pathFile.LocalPath);
-
-            foreach (ModFile file in pack.Files.Values)
+            NexTableLayout tableColumnLayout = TableMappingReader.ReadTableLayout("ui", new Version(1, 0, 0));
+            foreach (var locale in FF16PackPathUtil.PackLocales)
             {
-                if (file.PackPath.Contains(".path"))
-                    continue;
+                using var nexFileData = _modPackManager.PackManager.GetFileDataFromPackAsync(uiNxdPath, $"{packName}.{locale}").GetAwaiter().GetResult();
+                NexDataFile nexFile = new NexDataFile();
+                nexFile.Read(nexFileData.Span.ToArray());
 
-                _logger.WriteLine($"[{_modConfig.ModId}] {file.ModIdOwner}: Adding file '{file.PackPath}'");
-                builder.AddFile(file.LocalPath, file.PackPath);
-            }
+                var versionRow = nexFile.RowManager.GetRowInfo(19, 0, 0);
+                var builder = new NexDataFileBuilder(tableColumnLayout);
+                foreach (var row in nexFile.RowManager.GetAllRowInfos())
+                {
+                    List<object> cells = NexUtils.ReadRow(tableColumnLayout, nexFile.Buffer, row.RowDataOffset);
+                    if (row.Key == 19)
+                    {
+                        var mods = _modLoader.GetActiveMods()
+                            .Where(m => !m.Generic.ModId.Contains("Reloaded", StringComparison.OrdinalIgnoreCase) && m.Generic.ModId != _modConfig.ModId)
+                            .OrderBy(m => m.Generic.ModName)
+                            .ToList();
 
-            _logger.WriteLine($"[{_modConfig.ModId}] Writing '{pack.PackName}' ({pack.Files.Count} files)...");
+                        string str = (string)cells[1];
+                        str += "<br><br>";
+                        str += $"Reloaded-II <color=txtgray>{_modLoader.GetLoaderVersion()}</color> by <color=txtgray><i>Sewer56</i></color><br>";
+                        str += $"FFXVI Mod Loader <color=txtgray>{_modConfig.ModVersion}</color> by <color=txtgray><i>{_modConfig.ModAuthor}</i></color><br>";
+                        str += $"<color=main_quest>FFXVI Modding</color>: <color=txtgray>nenkai.github.io/ffxvi-modding</color><br>";
+                        str += $"<color=text_red>Support:</color> <color=txtgray>ko-fi.com/nenkai</color><br>";
+                        str += $"<color=txtlightblue>Twitter:</color> <color=txtgray>twitter.com/Nenkaai</color><br>";
 
-            try
-            {
-                builder.WriteToAsync(Path.Combine(dataDir, $"{pack.PackName}.pac")).GetAwaiter().GetResult();
-            }
-            catch (IOException ioEx)
-            {
-                _logger.WriteLine($"[{_modConfig.ModId}] Failed to write {pack.PackName} with IOException - is the game already running as another process? Error: {ioEx.Message}", _logger.ColorRed);
-                return;
-            }
-            catch (Exception ex)
-            {
-                _logger.WriteLine($"[{_modConfig.ModId}] Failed to write {pack.PackName}: {ex.Message}", _logger.ColorRed);
-                return;
+                        str += "<br>";
+                        if (mods.Count > 0)
+                        {
+                            str += $"<color=tip_rank2><scale=1.2><b><icon=4028> Installed Mods ({mods.Count}) <icon=4028></b></color><br>";
+                            str += "<scale>"; // reset scale
+
+                            int numModsToShow = Math.Min(mods.Count, 30);
+                            int rem = mods.Count % numModsToShow;
+                            for (int i = 0; i < numModsToShow; i++)
+                            {
+                                var mod = mods[i];
+                                str += $"{mod.Generic.ModName} <color=txtgray>{mod.Generic.ModVersion}</color> by <color=txtgray><i>{mod.Generic.ModAuthor}</i></color><br>";
+                            }
+
+                            if (rem > 0)
+                                str += $"...and {rem} other mods";
+                        }
+                        else
+                        {
+                            str += "No mods loaded";
+                        }
+
+                        cells[1] = str;
+                    }
+
+                    builder.AddRow(row.Key, row.Key2, row.Key3, cells);
+                }
+
+                string packPath = Path.Combine(tempModLoaderDataDir, $"{packName}.{locale}");
+                string stagingNxdPath = Path.Combine(packPath, uiNxdPath);
+                Directory.CreateDirectory(Path.GetDirectoryName(stagingNxdPath));
+
+                using (var fs = new FileStream(stagingNxdPath, FileMode.Create))
+                    builder.Write(fs);
+
+                _modPackManager.AddFile(_modConfig.ModId, tempModLoaderDataDir, stagingNxdPath);
             }
         }
+        catch (Exception ex)
+        {
+            _logger.WriteLine($"[{_modConfig.ModId}] Cannot apply title screen ui patch - {ex.Message}", _logger.ColorRed);
+            return;
+        }
 
-        _logger.WriteLine($"[{_modConfig.ModId}] FFXVI Mod loader initialized with {_modPackFiles.Count} pack(s).", _logger.ColorGreen);
+        // Edited ui file. Changed the version text ui element to be much larger, and vertically aligned to bottom
+        // Moved DLC banners to the left of the screen
+        string modIdDir = Path.Combine(_modLoader.GetDirectoryForModId(_modConfig.ModId));
+        string modDir = Path.Combine(modIdDir, "FFXVI", "data");
+        string titleUib = Path.Combine(modDir, "ui", "gameflow", "title", "title01.uib");
+
+        if (!File.Exists(titleUib))
+        {
+            _logger.WriteLine($"[{_modConfig.ModId}] Cannot apply title screen ui patch - ui/gameflow/title/title01.uib is missing?", _logger.ColorRed);
+            return;
+        }
+
+        _modPackManager.AddFile(_modConfig.ModId, modDir, titleUib);
     }
+
 
     #region Standard Overrides
     public override void ConfigurationUpdated(Config configuration)
@@ -265,12 +274,29 @@ public class Mod : ModBase // <= Do not Remove.
 public class ModFile
 {
     public string ModIdOwner { get; set; }
-    public string PackPath { get; set; }
+    public string GamePath { get; set; }
     public string LocalPath { get; set; }
 }
 
 public class ModPack
 {
-    public string PackName { get; set; }
+    /// <summary>
+    /// Main pack name regardless of locale, i.e "0007".
+    /// </summary>
+    public string MainPackName { get; set; }
+
+    /// <summary>
+    /// Pack name including locale, i.e "0007" or "0007.en".
+    /// </summary>
+    public string BaseLocalePackName { get; set; }
+
+    /// <summary>
+    /// Diff pack name, i.e "0007.diff" or "0007.diff.en".
+    /// </summary>
+    public string DiffPackName { get; set; }
+
+    /// <summary>
+    /// Modded files for this pack.
+    /// </summary>
     public Dictionary<string, ModFile> Files { get; set; } = new();
 }
