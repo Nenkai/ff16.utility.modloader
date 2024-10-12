@@ -16,20 +16,7 @@ If you'd like to remove mods, head to the game's folder, `data` and remove any `
 
 ## Mod File Structure
 
-1. Follow this guide to create a [Reloaded-II](https://reloaded-project.github.io/Reloaded-II/CreatingMods/) mod.
-2. Your mod name should start with `ff16.` (for clarity).
-3. Add `Final Fantasy XVI / 16 Mod Loader` as dependency.
-4. Follow this file structure for game files:
-
-```
-FFXVI
-└─ data
-   ├─ 0001 (folder for each pack)
-      ├─ <modded files for 0001 goes here>
-```
-
-> [!WARNING]
-> You should preserve `.path` files if they were present.
+Refer to [**this page**](https://nenkai.github.io/ffxvi-modding/modding/creating_mods/).
 
 You can use [**the template mod**](https://github.com/Nenkai/ff16.utility.modloader/releases/download/1.0.1/ff16.template.helloworld.zip) (which changes some of the main menu ui text to `Hello World`) for reference.
 
