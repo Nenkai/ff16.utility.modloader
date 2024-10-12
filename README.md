@@ -22,7 +22,7 @@ You can use [**the template mod**](https://github.com/Nenkai/ff16.utility.modloa
 
 ## Building
 
-You may need to remove the `runtimes` folder after compiling, otherwise could cause conflicts with the game's dstorage.dll (and get stuck on a black screen).
+You may need to remove the `dstorage.dll` files in `runtimes` folders after compiling, otherwise could cause conflicts with the game's dstorage.dll
 
 ## Discord
 
