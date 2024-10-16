@@ -439,7 +439,7 @@ public class FF16ModPackManager : IFF16ModPackManager
                         Print($"{thisModTableChanges.Key} - Processing {thisModTableChanges.Value.InsertedRows.Count} added rows for nex table '{nexFile.Key}'");
                         foreach (var newRow in thisModTableChanges.Value.InsertedRows)
                         {
-                            if (!nexBuilder.AddRow(newRow.Key.Key, newRow.Key.Key2, newRow.Key.Key3, newRow.Value, overwriteIfExists: true));
+                            if (!nexBuilder.AddRow(newRow.Key.Key, newRow.Key.Key2, newRow.Key.Key3, newRow.Value, overwriteIfExists: true))
                                 PrintWarning($"{thisModTableChanges.Key} - {nexFile.Key}:({newRow.Key.Key},{newRow.Key.Key2},{newRow.Key.Key3}) was already added to nex table '{nexFile.Key}' - overwriting...");
                         }
                     }

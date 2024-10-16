@@ -59,10 +59,10 @@ public class NexModComparer
         }
 
         // Check for rows that the modded nex file potentially added
-        List<NexRowInfo> newRowInfos = originalNexTable.RowManager.GetAllRowInfos();
+        List<NexRowInfo> newRowInfos = modNexTable.RowManager.GetAllRowInfos();
         for (int i = 0; i < newRowInfos.Count; i++)
         {
-            NexRowInfo newRowInfo = ogRowInfos[i];
+            NexRowInfo newRowInfo = newRowInfos[i];
             if (!originalNexTable.RowManager.TryGetRowInfo(out _, newRowInfo.Key, newRowInfo.Key2, newRowInfo.Key3))
             {
                 // Row was added by mod file
