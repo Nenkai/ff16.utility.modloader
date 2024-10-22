@@ -20,8 +20,10 @@ namespace ff16.utility.modloader;
 /// <summary>
 /// Your mod logic goes here.
 /// </summary>
-public class Mod : ModBase // <= Do not Remove.
+public class Mod : ModBase, IExports // <= Do not Remove.
 {
+    public Type[] GetTypes() => [typeof(IFF16ModPackManager)];
+
     /// <summary>
     /// Provides access to the mod loader API.
     /// </summary>

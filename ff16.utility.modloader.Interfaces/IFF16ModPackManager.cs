@@ -16,11 +16,6 @@ public interface IFF16ModPackManager
     public bool Initialized { get; }
 
     /// <summary>
-    /// Underlying pack manager.
-    /// </summary>
-    public FF16PackManager PackManager { get; }
-
-    /// <summary>
     /// Whether the current game is FF16 Demo.
     /// </summary>
     public bool IsDemo { get; }
