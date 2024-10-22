@@ -12,8 +12,8 @@ using FF16Tools.Files.Nex.Entities;
 
 using ff16.utility.modloader.Configuration;
 using ff16.utility.modloader.Template;
+using ff16.utility.modloader.Interfaces;
 using FF16Tools.Files;
-
 
 namespace ff16.utility.modloader;
 
@@ -84,6 +84,7 @@ public class Mod : ModBase // <= Do not Remove.
         ClearDiffPackState();
 
         _modPackManager = new FF16ModPackManager(_modConfig, _modLoader, _logger, _configuration);
+
         if (!_modPackManager.Initialize(Path.Combine(_appDir, "data"), _tempDir, isDemo: isDemo))
         {
             _logger.WriteLine($"[{context.ModConfig.ModId}] Pack manager failed to initialize.", _logger.ColorRed);
@@ -229,7 +230,7 @@ public class Mod : ModBase // <= Do not Remove.
                 using (var fs = new FileStream(stagingNxdPath, FileMode.Create))
                     builder.Write(fs);
 
-                _modPackManager.AddFile(_modConfig.ModId, tempModLoaderDataDir, stagingNxdPath);
+                _modPackManager.AddModdedFile(_modConfig.ModId, tempModLoaderDataDir, stagingNxdPath);
             }
         }
         catch (Exception ex)
@@ -250,7 +251,7 @@ public class Mod : ModBase // <= Do not Remove.
             return;
         }
 
-        _modPackManager.AddFile(_modConfig.ModId, modDir, titleUib);
+        _modPackManager.AddModdedFile(_modConfig.ModId, modDir, titleUib);
     }
 
 
@@ -269,13 +270,6 @@ public class Mod : ModBase // <= Do not Remove.
     public Mod() { }
 #pragma warning restore CS8618
     #endregion
-}
-
-public class ModFile
-{
-    public string ModIdOwner { get; set; }
-    public string GamePath { get; set; }
-    public string LocalPath { get; set; }
 }
 
 public class ModPack
@@ -298,5 +292,5 @@ public class ModPack
     /// <summary>
     /// Modded files for this pack.
     /// </summary>
-    public Dictionary<string, ModFile> Files { get; set; } = new();
+    public Dictionary<string, FF16ModFile> Files { get; set; } = new();
 }

@@ -40,12 +40,16 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="FF16Tools.Files" Version="1.0.2" />
+    <PackageReference Include="FF16Tools.Files" Version="1.0.5" />
     <PackageReference Include="FF16Tools.Pack" Version="1.0.14" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
     <PackageReference Include="Reloaded.Mod.Interfaces" Version="2.4.0" ExcludeAssets="runtime" />
     <PackageReference Include="Reloaded.SharedLib.Hooks" Version="1.9.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ff16.utility.modloader.Interfaces\ff16.utility.modloader.Interfaces.csproj" />
   </ItemGroup>
 
   <ItemGroup>

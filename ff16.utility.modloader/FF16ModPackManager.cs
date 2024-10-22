@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using System.Collections.ObjectModel;
 
 using Microsoft.Extensions.Logging;
 using CommunityToolkit.HighPerformance.Buffers;
@@ -13,25 +14,34 @@ using FF16Tools.Pack;
 using FF16Tools.Pack.Packing;
 
 using ff16.utility.modloader.Configuration;
+using ff16.utility.modloader.Interfaces;
 
 namespace ff16.utility.modloader;
 
 public class FF16ModPackManager : IFF16ModPackManager
 {
+    #region Private Fields
     private IModConfig _modConfig;
     private IModLoader _modLoader;
     private Reloaded.Mod.Interfaces.ILogger _reloadedLogger;
     private Config _configuration;
     private ILoggerFactory _loggerFactory;
 
-    private bool _initialized = false;
-
     private Dictionary<string, ModPack> _modPackFiles = new();
+
+    private Dictionary<string, IFF16ModFile> _moddedFiles = new();
 
     // Builders for each pack.
     private Dictionary<string, FF16PackBuilder> _packBuilders = new();
 
     private NexModComparer _nexModComparer = new();
+    #endregion
+
+    #region Public Properties
+    /// <summary>
+    /// Whether the mod pack manager is initialized.
+    /// </summary>
+    public bool Initialized { get; private set; }
 
     /// <summary>
     /// Underlying pack manager.
@@ -49,9 +59,12 @@ public class FF16ModPackManager : IFF16ModPackManager
     public string TempFolder { get; private set; }
 
     /// <summary>
-    /// Whether the game is demo.
+    /// Whether the current game is FF16 Demo.
     /// </summary>
     public bool IsDemo { get; private set; }
+
+    public IReadOnlyDictionary<string, IFF16ModFile> ModdedFiles => new ReadOnlyDictionary<string, IFF16ModFile>(_moddedFiles);
+    #endregion
 
     public FF16ModPackManager(IModConfig modConfig, IModLoader modLoader, Reloaded.Mod.Interfaces.ILogger logger, Config configuration)
     {
@@ -66,7 +79,7 @@ public class FF16ModPackManager : IFF16ModPackManager
     /// <inheritdoc/>
     public bool Initialize(string dataDir, string tempFolder, bool isDemo = false)
     {
-        if (_initialized)
+        if (Initialized)
             throw new InvalidOperationException("Mod pack manager is already initialized.");
 
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDir, nameof(dataDir));
@@ -86,7 +99,7 @@ public class FF16ModPackManager : IFF16ModPackManager
         DataDirectory = dataDir;
         TempFolder = tempFolder;
         IsDemo = isDemo;
-        _initialized = true;
+        Initialized = true;
 
         return true;
     }
@@ -97,17 +110,21 @@ public class FF16ModPackManager : IFF16ModPackManager
         ArgumentException.ThrowIfNullOrWhiteSpace(modId, nameof(modId));
         ArgumentException.ThrowIfNullOrWhiteSpace(modDir, nameof(modDir));
 
+        ThrowIfNotInitialized();
+
         foreach (var file in Directory.GetFiles(modDir, "*", SearchOption.AllDirectories))
         {
-            AddFile(modId, modDir, file);
+            AddModdedFile(modId, modDir, file);
         }
     }
 
     /// <inheritdoc/>
-    public void AddFile(string modId, string baseDir, string localPath)
+    public void AddModdedFile(string modId, string baseDir, string localPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(modId, nameof(modId));
         ArgumentException.ThrowIfNullOrWhiteSpace(localPath, nameof(localPath));
+
+        ThrowIfNotInitialized();
 
         string relPath = Path.GetRelativePath(baseDir, localPath);
         string topLevel = GetTopLevelDir(relPath);
@@ -172,9 +189,9 @@ public class FF16ModPackManager : IFF16ModPackManager
 
         Print($"{modId}: Adding file '{gamePath}' ({packName})");
 
-        if (!modPack.Files.TryGetValue(localPath, out ModFile modFile))
+        if (!modPack.Files.TryGetValue(packFilePath, out FF16ModFile modFile))
         {
-            modFile = new ModFile()
+            modFile = new FF16ModFile()
             {
                 ModIdOwner = modId,
                 LocalPath = localPath,
@@ -182,14 +199,33 @@ public class FF16ModPackManager : IFF16ModPackManager
             };
 
             modPack.Files.TryAdd(packFilePath, modFile);
+            _moddedFiles.TryAdd(packFilePath, modFile);
         }
         else
         {
             // overriding
             PrintWarning($"Conflict: {modFile.GamePath} is used by {modFile.ModIdOwner}, overwriting by {modId}");
+
             modFile.ModIdOwner = modId;
             modFile.LocalPath = localPath;
+
+            _moddedFiles[packFilePath] = modFile;
         }
+    }
+
+    /// </inheritdoc>
+    public bool RemoveModdedFile(string gamePath)
+    {
+        ThrowIfNotInitialized();
+
+        gamePath = FF16PackPathUtil.NormalizePath(gamePath);
+
+        foreach (var modPack in _modPackFiles.Values)
+        {
+            modPack.Files.Remove(gamePath);
+        }
+
+        return _moddedFiles.Remove(gamePath);
     }
 
     /// <summary>
@@ -197,6 +233,8 @@ public class FF16ModPackManager : IFF16ModPackManager
     /// </summary>
     public void Apply()
     {
+        ThrowIfNotInitialized();
+
         foreach (KeyValuePair<string, ModPack> pack in _modPackFiles)
         {
             string internalDirName = string.Empty;
@@ -215,7 +253,7 @@ public class FF16ModPackManager : IFF16ModPackManager
 
             _packBuilders[pack.Key] = builder;
 
-            foreach (ModFile file in pack.Value.Files.Values)
+            foreach (FF16ModFile file in pack.Value.Files.Values)
             {
                 builder.AddFile(file.LocalPath, file.GamePath);
             }
@@ -456,6 +494,12 @@ public class FF16ModPackManager : IFF16ModPackManager
         }
     }
 
+    public void ThrowIfNotInitialized()
+    {
+        if (!Initialized)
+            throw new InvalidOperationException("Mod pack manager is not initialized.");
+    }
+
     public void Dispose()
     {
         PackManager?.Dispose();
@@ -472,7 +516,7 @@ public class FF16ModPackManager : IFF16ModPackManager
     private string GetTopLevelDir(string filePath)
     {
         string temp = Path.GetDirectoryName(filePath);
-        if (temp.Contains("\\"))
+        if (temp.Contains('\\'))
         {
             temp = temp.Substring(0, temp.IndexOf("\\"));
         }
