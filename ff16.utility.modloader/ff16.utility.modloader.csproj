@@ -40,8 +40,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="FF16Tools.Files" Version="1.0.5" />
-    <PackageReference Include="FF16Tools.Pack" Version="1.0.14" />
+    <PackageReference Include="FF16Tools.Files" Version="1.0.7" />
+    <PackageReference Include="FF16Tools.Pack" Version="1.0.17" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
     <PackageReference Include="Reloaded.Mod.Interfaces" Version="2.4.0" ExcludeAssets="runtime" />

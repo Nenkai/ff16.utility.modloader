@@ -15,6 +15,7 @@ using FF16Tools.Pack.Packing;
 
 using ff16.utility.modloader.Configuration;
 using ff16.utility.modloader.Interfaces;
+using Syroot.BinaryData;
 
 namespace ff16.utility.modloader;
 
@@ -105,6 +106,32 @@ public class FF16ModPackManager : IFF16ModPackManager
     }
 
     /// <inheritdoc/>
+    public byte[] GetFileData(string gamePath, string packSuffix = "")
+    {
+        if (!string.IsNullOrWhiteSpace(packSuffix))
+        {
+            if (FF16PackPathUtil.TryGetPackNameForPath(gamePath, out string packName, out _))
+                return PackManager.GetFileDataBytesFromPack(gamePath, $"{packName}.{packSuffix}");
+            else // whatever, put in 0000
+                return PackManager.GetFileDataBytesFromPack(gamePath, $"0000.{packSuffix}");
+        }
+
+        return PackManager.GetFileDataBytes(gamePath);
+    }
+
+    /// <inheritdoc/>
+    public bool FileExists(string gamePath, string packSuffix = "")
+    {
+        if (!string.IsNullOrWhiteSpace(packSuffix))
+        {
+            if (FF16PackPathUtil.TryGetPackNameForPath(gamePath, out string packName, out _))
+                return PackManager.GetFileInfoFromPack(gamePath, $"{packName}.{packSuffix}") != null;
+        }
+
+        return PackManager.GetFileInfo(gamePath) is not null;
+    }
+
+    /// <inheritdoc/>
     public void RegisterModDirectory(string modId, string modDir)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(modId, nameof(modId));
@@ -116,6 +143,24 @@ public class FF16ModPackManager : IFF16ModPackManager
         {
             AddModdedFile(modId, modDir, file);
         }
+    }
+
+    /// <inheritdoc/>
+    public void AddModdedFile(string modId, string gamePath, byte[] data)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(modId, nameof(modId));
+        ArgumentException.ThrowIfNullOrWhiteSpace(gamePath, nameof(gamePath));
+        ArgumentNullException.ThrowIfNull(data, nameof(data));
+
+        ThrowIfNotInitialized();
+
+        string baseDir = Path.Combine(TempFolder, modId);
+        string fullPath = Path.Combine(baseDir, gamePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath));
+
+        File.WriteAllBytes(fullPath, data);
+
+        AddModdedFile(modId, baseDir, fullPath);
     }
 
     /// <inheritdoc/>
@@ -181,7 +226,7 @@ public class FF16ModPackManager : IFF16ModPackManager
             return;
 
         ModPack modPack = GetOrAddDiffPack(packName);
-        if (_configuration.MergeNexFileChanges && localPath.EndsWith(".nxd"))
+        if (_configuration.MergeNexFileChanges && IsNexFile(localPath))
         {
             RecordNexChanges(modId, packName, packFilePath, localPath);
             return;
@@ -350,7 +395,7 @@ public class FF16ModPackManager : IFF16ModPackManager
         {
             if (PackManager.GetFileInfoFromPack(nexGamePath, packName) is not null)
             {
-                ogNexFileData = PackManager.GetFileDataFromPackAsync(nexGamePath, packName).GetAwaiter().GetResult();
+                ogNexFileData = PackManager.GetFileDataFromPack(nexGamePath, packName);
             }
             else
             {
@@ -358,7 +403,7 @@ public class FF16ModPackManager : IFF16ModPackManager
                     throw new FileNotFoundException($"File '{nexGamePath}' not found in any packs.");
                 else
                 {
-                    ogNexFileData = PackManager.GetFileDataAsync(nexGamePath, includeDiff: false).GetAwaiter().GetResult();
+                    ogNexFileData = PackManager.GetFileData(nexGamePath, includeDiff: false);
                     PrintWarning($"{modId} warning - '{nexGamePath}' was not found in pack '{packName}' but it was found elsewhere. " +
                         $"While this may work, ensure to place '{nexGamePath}' in the correct pack folder (especially if it was found in a localized pack, otherwise it will overwrite user language).");
                 }
@@ -401,8 +446,8 @@ public class FF16ModPackManager : IFF16ModPackManager
                 // Not my finest work
                 string ogPackName = nexPack.Key.Replace(".diff", string.Empty);
                 using MemoryOwner<byte> ogNexFileData = PackManager.GetFileInfoFromPack(nexGamePath, ogPackName) is not null ?
-                    PackManager.GetFileDataFromPackAsync(nexGamePath, ogPackName).GetAwaiter().GetResult() :
-                    PackManager.GetFileDataAsync(nexGamePath, includeDiff: false).GetAwaiter().GetResult();
+                    PackManager.GetFileDataFromPack(nexGamePath, ogPackName) :
+                    PackManager.GetFileData(nexGamePath, includeDiff: false);
 
                 NexDataFile originalTableFile = new NexDataFile();
                 originalTableFile.Read(ogNexFileData.Span.ToArray());
@@ -513,7 +558,7 @@ public class FF16ModPackManager : IFF16ModPackManager
         return diffPackName;
     }
 
-    private string GetTopLevelDir(string filePath)
+    private static string GetTopLevelDir(string filePath)
     {
         string temp = Path.GetDirectoryName(filePath);
         if (temp.Contains('\\'))
@@ -527,6 +572,18 @@ public class FF16ModPackManager : IFF16ModPackManager
         return temp;
     }
 
+    private static bool IsNexFile(string localPath)
+    {
+        if (localPath.EndsWith(".nxd"))
+            return true;
+
+        using var fs = new FileStream(localPath, FileMode.Open);
+        if (fs.Length < 4)
+            return false;
+
+        using var bs = new BinaryStream(fs);
+        return bs.ReadUInt32() == NexDataFile.MAGIC;
+    }
 
     private void Print(string message)
     {
