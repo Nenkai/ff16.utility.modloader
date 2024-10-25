@@ -13,9 +13,9 @@
     <RepositoryUrl>https://github.com/Nenkai/ff16.utility.modloader/</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
-    <AssemblyVersion>1.0.3</AssemblyVersion>
-    <FileVersion>1.0.3</FileVersion>
-    <Version>1.0.3</Version>
+    <AssemblyVersion>1.0.4</AssemblyVersion>
+    <FileVersion>1.0.4</FileVersion>
+    <Version>1.0.4</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,11 +24,7 @@
       <PackagePath>\</PackagePath>
     </None>
   </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="FF16Tools.Pack" Version="1.0.14" />
-  </ItemGroup>
-
+	
   <ItemGroup>
     <None Update="README.md">
       <Pack>True</Pack>
