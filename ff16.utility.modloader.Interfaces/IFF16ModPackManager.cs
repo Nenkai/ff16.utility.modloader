@@ -4,8 +4,6 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-using FF16Tools.Pack;
-
 namespace ff16.utility.modloader.Interfaces;
 
 public interface IFF16ModPackManager
