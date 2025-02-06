@@ -64,10 +64,13 @@ public class FF16ModPackManager : IFF16ModPackManager
     /// </summary>
     public bool IsDemo { get; private set; }
 
+    /// <inheritdoc//>
+    public Version GameVersion { get; private set; }
+
     public IReadOnlyDictionary<string, IFF16ModFile> ModdedFiles => new ReadOnlyDictionary<string, IFF16ModFile>(_moddedFiles);
     #endregion
 
-    public FF16ModPackManager(IModConfig modConfig, IModLoader modLoader, Reloaded.Mod.Interfaces.ILogger logger, Config configuration)
+    public FF16ModPackManager(IModConfig modConfig, IModLoader modLoader, Reloaded.Mod.Interfaces.ILogger logger, Config configuration, Version version)
     {
         _modConfig = modConfig;
         _modLoader = modLoader;
@@ -75,6 +78,8 @@ public class FF16ModPackManager : IFF16ModPackManager
         _configuration = configuration;
 
         _loggerFactory = LoggerFactory.Create(e => e.AddProvider(new R2LoggerToMSLoggerAdapterProvider(logger)));
+
+        GameVersion = version;
     }
 
     /// <inheritdoc/>
@@ -509,7 +514,7 @@ public class FF16ModPackManager : IFF16ModPackManager
                                 if (_configuration.LogNexCellChanges)
                                 {
                                     Print($"{thisModTableChanges.Key} - {nexFile.Key}:({rowChanges.Key.Key},{rowChanges.Key.Key2},{rowChanges.Key.Key3}) " +
-                                        $"{tableColumnLayout.Columns[CellIndex].Name} changed", System.Drawing.Color.DarkGray);
+                                        $"{tableColumnLayout.Columns.ElementAt(CellIndex).Key} changed", System.Drawing.Color.DarkGray);
                                 }
 
                                 row.Cells[CellIndex] = CellValue;

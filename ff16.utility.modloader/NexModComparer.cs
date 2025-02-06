@@ -16,11 +16,11 @@ public class NexModComparer
 {
     // Keeps tracks of nex changes so we can merge them.
     // Dictionary<pack name, Dictionary<table name, Dictionary<mod id, changes>>>
-    private Dictionary<string, Dictionary<string, Dictionary<string, NexTableChange>>> _nexChanges = new();
+    private Dictionary<string, Dictionary<string, Dictionary<string, NexTableChange>>> _nexChanges = [];
 
     public void RecordChanges(string modId, string diffPackName, string tableName, NexDataFile originalNexTable, NexDataFile modNexTable)
     {
-        _nexChanges.TryAdd(diffPackName, new());
+        _nexChanges.TryAdd(diffPackName, []);
 
         NexTableLayout tableColumnLayout = TableMappingReader.ReadTableLayout(tableName, new Version(1, 0, 0));
 
@@ -31,7 +31,7 @@ public class NexModComparer
             if (!modNexTable.RowManager.TryGetRowInfo(out NexRowInfo modRowInfo, ogRowInfo.Key, ogRowInfo.Key2, ogRowInfo.Key3))
             {
                 // Row was removed by mod file
-                _nexChanges[diffPackName].TryAdd(tableName, new());
+                _nexChanges[diffPackName].TryAdd(tableName, []);
                 _nexChanges[diffPackName][tableName].TryAdd(modId, new NexTableChange(modId));
                 _nexChanges[diffPackName][tableName][modId].RemovedRows.Add((ogRowInfo.Key, ogRowInfo.Key2, ogRowInfo.Key3));
             }
@@ -43,14 +43,18 @@ public class NexModComparer
 
                 for (int j = 0; j < ogRow.Count; j++)
                 {
-                    if (!IsSameNexCell(tableColumnLayout, tableColumnLayout.Columns[j], ogRow[j], newRow[j]))
+                    var col = tableColumnLayout.Columns.ElementAt(j);
+                    if (col.Key.StartsWith("Comment")) // Don't need these
+                        continue;
+
+                    if (!IsSameNexCell(tableColumnLayout, col.Value, ogRow[j], newRow[j]))
                     {
-                        _nexChanges[diffPackName].TryAdd(tableName, new());
+                        _nexChanges[diffPackName].TryAdd(tableName, []);
                         _nexChanges[diffPackName][tableName].TryAdd(modId, new NexTableChange(modId));
 
                         // A row has a cell different from original
                         var rowKey = (ogRowInfo.Key, ogRowInfo.Key2, ogRowInfo.Key3);
-                        _nexChanges[diffPackName][tableName][modId].RowChanges.TryAdd(rowKey, new());
+                        _nexChanges[diffPackName][tableName][modId].RowChanges.TryAdd(rowKey, []);
 
                         _nexChanges[diffPackName][tableName][modId].RowChanges[rowKey].Add((j, newRow[j]));
                     }
@@ -66,7 +70,7 @@ public class NexModComparer
             if (!originalNexTable.RowManager.TryGetRowInfo(out _, newRowInfo.Key, newRowInfo.Key2, newRowInfo.Key3))
             {
                 // Row was added by mod file
-                _nexChanges[diffPackName].TryAdd(tableName, new());
+                _nexChanges[diffPackName].TryAdd(tableName, []);
                 _nexChanges[diffPackName][tableName].TryAdd(modId, new NexTableChange(modId));
 
                 var newRow = NexUtils.ReadRow(tableColumnLayout, modNexTable.Buffer, newRowInfo.RowDataOffset);
@@ -102,6 +106,12 @@ public class NexModComparer
                 return (long)left == (long)right;
             case NexColumnType.String:
                 return string.Equals((string)left, (string)right);
+            case NexColumnType.Union:
+                {
+                    var leftUnion = (NexUnion)left;
+                    var rightUnion = (NexUnion)right;
+                    return leftUnion.Type == rightUnion.Type && leftUnion.Value == rightUnion.Value;
+                }
             case NexColumnType.ByteArray:
                 {
                     byte[] leftArray = (byte[])left;
@@ -166,6 +176,24 @@ public class NexModComparer
 
                     return true;
                 }
+            case NexColumnType.UnionArray:
+                {
+                    NexUnion[] leftArray = (NexUnion[])left;
+                    NexUnion[] rightArray = (NexUnion[])right;
+
+                    if (leftArray.Length != rightArray.Length)
+                        return false;
+
+                    for (int i = 0; i < leftArray.Length; i++)
+                    {
+                        var leftUnion = leftArray[i];
+                        var rightUnion = rightArray[i];
+                        if (leftUnion.Type != rightUnion.Type || leftUnion.Value != rightUnion.Value)
+                            return false;
+                    }
+
+                    return true;
+                }
             case NexColumnType.CustomStructArray:
                 {
                     object[] leftArray = (object[])left;
@@ -198,9 +226,9 @@ public class NexTableChange
 {
     public string ModId { get; set; }
 
-    public HashSet<(uint Key, uint Key2, uint Key3)> RemovedRows { get; set; } = new();
-    public Dictionary<(uint Key, uint Key2, uint Key3), List<(int CellIndex, object CellValue)>> RowChanges { get; set; } = new();
-    public Dictionary<(uint Key, uint Key2, uint Key3), List<object>> InsertedRows { get; set; } = new();
+    public HashSet<(uint Key, uint Key2, uint Key3)> RemovedRows { get; set; } = [];
+    public Dictionary<(uint Key, uint Key2, uint Key3), List<(int CellIndex, object CellValue)>> RowChanges { get; set; } = [];
+    public Dictionary<(uint Key, uint Key2, uint Key3), List<object>> InsertedRows { get; set; } = [];
 
     public NexTableChange(string modId)
     {

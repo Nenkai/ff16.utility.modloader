@@ -19,6 +19,12 @@ public interface IFF16ModPackManager
     public bool IsDemo { get; }
 
     /// <summary>
+    /// Game version. <br/>
+    /// NOTE: Minor will always be 0. 1.02 will translate to 1.0.2, 1.99 will translate to 1.0.99.
+    /// </summary>
+    public Version GameVersion { get; }
+
+    /// <summary>
     /// Folder to use for temp files.
     /// </summary>
     public string TempFolder { get; }

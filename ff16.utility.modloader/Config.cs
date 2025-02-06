@@ -23,6 +23,12 @@ namespace ff16.utility.modloader.Configuration
         [Description("Whether to add mod information to the main menu.")]
         [DefaultValue(true)]
         public bool AddMainMenuModInfo { get; set; } = true;
+
+        [DisplayName("Remove exception/crash handler")]
+        [Description("(Advanced users only) Whether to remove the default exception handler." +
+            "Removes the 'An unexpected error has occurred. Exiting FINAL FANTASY XVI.' message on crash.")]
+        [DefaultValue(true)]
+        public bool RemoveExceptionHandler { get; set; } = true;
     }
 
     /// <summary>

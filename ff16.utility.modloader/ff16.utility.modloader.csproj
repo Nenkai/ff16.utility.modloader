@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net9.0-windows</TargetFramework>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <LangVersion>12.0</LangVersion>
@@ -40,10 +40,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="FF16Tools.Files" Version="1.0.7" />
+    <PackageReference Include="FF16Tools.Files" Version="1.1.0" />
     <PackageReference Include="FF16Tools.Pack" Version="1.0.17" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+    <PackageReference Include="Microsoft.Windows.CsWin32" Version="0.3.162">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <PackageReference Include="Reloaded.Mod.Interfaces" Version="2.4.0" ExcludeAssets="runtime" />
     <PackageReference Include="Reloaded.SharedLib.Hooks" Version="1.9.0" />
   </ItemGroup>
@@ -71,17 +75,5 @@
 		<Exec Command="del $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\win-arm64\native\dstoragecore.dll" />
 		<Exec Command="del $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\win-arm\native\dstorage.dll" />
 		<Exec Command="del $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\win-arm\native\dstoragecore.dll" />
-
-		<!-- We don't need all these (produced by sqlite) -->
-		<Exec Command="rmdir /s /q $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\browser-wasm" />
-		<Exec Command="rmdir /s /q $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\linux-ppc64le" />
-		<Exec Command="rmdir /s /q $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\linux-musl-x64" />
-		<Exec Command="rmdir /s /q $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\linux-musl-arm64" />
-		<Exec Command="rmdir /s /q $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\linux-musl-arm" />
-		<Exec Command="rmdir /s /q $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\linux-mips64" />
-		<Exec Command="rmdir /s /q $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\linux-s390x" />
-		<Exec Command="rmdir /s /q $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\linux-armel" />
-		<Exec Command="rmdir /s /q $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\maccatalyst-arm64" />
-		<Exec Command="rmdir /s /q $(RELOADEDIIMODS)\ff16.utility.modloader\runtimes\maccatalyst-x64" />
 	</Target>
 </Project>

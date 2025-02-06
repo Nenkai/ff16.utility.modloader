@@ -1,10 +1,9 @@
 ﻿using System.Diagnostics;
 
-using CommunityToolkit.HighPerformance.Buffers;
 
-using Reloaded.Hooks.ReloadedII.Interfaces;
 using Reloaded.Mod.Interfaces;
 using Reloaded.Mod.Interfaces.Internal;
+using Reloaded.Hooks.Definitions;
 
 using FF16Tools.Pack;
 using FF16Tools.Files.Nex;
@@ -13,14 +12,16 @@ using FF16Tools.Files.Nex.Entities;
 using ff16.utility.modloader.Configuration;
 using ff16.utility.modloader.Template;
 using ff16.utility.modloader.Interfaces;
-using FF16Tools.Files;
+
+
+using Windows.Win32;
 
 namespace ff16.utility.modloader;
 
 /// <summary>
 /// Your mod logic goes here.
 /// </summary>
-public class Mod : ModBase, IExports // <= Do not Remove.
+public partial class Mod : ModBase, IExports // <= Do not Remove.
 {
     public Type[] GetTypes() => [typeof(IFF16ModPackManager)];
 
@@ -57,8 +58,10 @@ public class Mod : ModBase, IExports // <= Do not Remove.
 
     public FF16ModPackManager _modPackManager;
 
+    private string _appLocation;
     private string _appDir;
     private string _tempDir;
+    private Version _gameVersion;
 
     public Mod(ModContext context)
     {
@@ -78,15 +81,18 @@ public class Mod : ModBase, IExports // <= Do not Remove.
         Debugger.Launch();
 #endif
 
-        string appLocation = _modLoader.GetAppConfig().AppLocation;
-        _appDir = Path.GetDirectoryName(appLocation);
+        _appLocation = _modLoader.GetAppConfig().AppLocation;
+        _appDir = Path.GetDirectoryName(_appLocation);
         _tempDir = Path.Combine(_modLoader.GetDirectoryForModId(_modConfig.ModId), "staging");
         bool isDemo = _modLoader.GetAppConfig().AppId == "ffxvi_demo.exe";
 
+        GetGameVersion();
+        HookExceptionHandler();
+
         ClearDiffPackState();
 
-        _modPackManager = new FF16ModPackManager(_modConfig, _modLoader, _logger, _configuration);
-
+        _modPackManager = new FF16ModPackManager(_modConfig, _modLoader, _logger, _configuration, _gameVersion);
+        
         if (!_modPackManager.Initialize(Path.Combine(_appDir, "data"), _tempDir, isDemo: isDemo))
         {
             _logger.WriteLine($"[{context.ModConfig.ModId}] Pack manager failed to initialize.", _logger.ColorRed);
@@ -97,6 +103,61 @@ public class Mod : ModBase, IExports // <= Do not Remove.
 
         _modLoader.ModLoading += ModLoading;
         _modLoader.OnModLoaderInitialized += OnAllModsLoaded;
+    }
+
+    private delegate void ExceptionDelegate(nint value);
+    private static IHook<ExceptionDelegate> ExceptionHook;
+
+    private void HookExceptionHandler()
+    {
+        if (!_configuration.RemoveExceptionHandler)
+            return;
+
+        var kernel32 = PInvoke.GetModuleHandle("kernel32.dll");
+        if (kernel32 is null)
+        {
+            _logger.WriteLine("Could not load kernel32 module - exception handler won't be removed", _logger.ColorRed);
+            return;
+        }
+
+        var unhandledExceptionFilter = PInvoke.GetProcAddress(kernel32, "SetUnhandledExceptionFilter");
+        if (unhandledExceptionFilter.IsNull)
+        {
+            _logger.WriteLine("SetUnhandledExceptionFilter not found in kernel32 module - exception handler won't be removed", _logger.ColorRed);
+            return;
+        }
+
+        ExceptionHook = _hooks.CreateHook<ExceptionDelegate>(Hook, unhandledExceptionFilter).Activate();
+    }
+
+    private void Hook(nint value)
+    {
+        // nullsub
+    }
+
+    private void GetGameVersion()
+    {
+        FileVersionInfo fileVersionInfo = FileVersionInfo.GetVersionInfo(_appLocation);
+        string productVersion = fileVersionInfo.ProductVersion;
+
+        string[] spl = productVersion.Split('.');
+        if (spl.Length == 2)
+        {
+            if (int.TryParse(productVersion.Split('.')[0], out int major) && int.TryParse(productVersion.Split('.')[1], out int minor))
+            {
+                _gameVersion = new Version(major, 0, minor);
+            }
+        }
+
+        if (_gameVersion is null)
+        {
+            _logger.WriteLine($"[{_modConfig.ModId}] Failed to parse game version? Defaulting to 1.02", _logger.ColorRed);
+            _gameVersion = new Version(1, 0, 2);
+        }
+        else
+        {
+            _logger.WriteLine($"[{_modConfig.ModId}] Game Version: {productVersion}");
+        }
     }
 
     /// <summary>
@@ -170,14 +231,14 @@ public class Mod : ModBase, IExports // <= Do not Remove.
         string tempModLoaderDataDir = Path.Combine(_tempDir, "data");
         try
         {
-            NexTableLayout tableColumnLayout = TableMappingReader.ReadTableLayout("ui", new Version(1, 0, 0));
+            NexTableLayout tableColumnLayout = TableMappingReader.ReadTableLayout("ui", _gameVersion);
             foreach (var locale in FF16PackPathUtil.PackLocales)
             {
-                using var nexFileData = _modPackManager.PackManager.GetFileDataFromPackAsync(uiNxdPath, $"{packName}.{locale}").GetAwaiter().GetResult();
+                using var nexFileData = _modPackManager.PackManager.GetFileDataFromPack(uiNxdPath, $"{packName}.{locale}");
                 NexDataFile nexFile = new NexDataFile();
                 nexFile.Read(nexFileData.Span.ToArray());
 
-                var versionRow = nexFile.RowManager.GetRowInfo(19, 0, 0);
+                var versionRow = nexFile.RowManager.GetRowInfo(19);
                 var builder = new NexDataFileBuilder(tableColumnLayout);
                 foreach (var row in nexFile.RowManager.GetAllRowInfos())
                 {
@@ -225,8 +286,7 @@ public class Mod : ModBase, IExports // <= Do not Remove.
                     builder.AddRow(row.Key, row.Key2, row.Key3, cells);
                 }
 
-                string packPath = Path.Combine(tempModLoaderDataDir, $"{packName}.{locale}");
-                string stagingNxdPath = Path.Combine(packPath, uiNxdPath);
+                string stagingNxdPath = Path.Combine(tempModLoaderDataDir, $"nxd/{locale}/ui.nxd");
                 Directory.CreateDirectory(Path.GetDirectoryName(stagingNxdPath));
 
                 using (var fs = new FileStream(stagingNxdPath, FileMode.Create))
@@ -294,5 +354,5 @@ public class ModPack
     /// <summary>
     /// Modded files for this pack.
     /// </summary>
-    public Dictionary<string, FF16ModFile> Files { get; set; } = new();
+    public Dictionary<string, FF16ModFile> Files { get; set; } = [];
 }
