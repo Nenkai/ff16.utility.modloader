@@ -86,6 +86,7 @@ public partial class Mod : ModBase, IExports // <= Do not Remove.
         _tempDir = Path.Combine(_modLoader.GetDirectoryForModId(_modConfig.ModId), "staging");
         bool isDemo = _modLoader.GetAppConfig().AppId == "ffxvi_demo.exe";
 
+        CheckSteamAPIDll();
         GetGameVersion();
         HookExceptionHandler();
 
@@ -95,7 +96,7 @@ public partial class Mod : ModBase, IExports // <= Do not Remove.
         
         if (!_modPackManager.Initialize(Path.Combine(_appDir, "data"), _tempDir, isDemo: isDemo))
         {
-            _logger.WriteLine($"[{context.ModConfig.ModId}] Pack manager failed to initialize.", _logger.ColorRed);
+            _logger.WriteLine($"[{_modConfig.ModId}] Pack manager failed to initialize.", _logger.ColorRed);
             return;
         }
 
@@ -103,6 +104,17 @@ public partial class Mod : ModBase, IExports // <= Do not Remove.
 
         _modLoader.ModLoading += ModLoading;
         _modLoader.OnModLoaderInitialized += OnAllModsLoaded;
+    }
+
+    private void CheckSteamAPIDll()
+    {
+        string steamApiDll = Path.Combine(_appDir, "steam_api64.dll");
+        if (File.Exists(steamApiDll))
+        {
+            var steamApiDllInfo = new FileInfo(steamApiDll);
+            if (steamApiDllInfo.Length > 400_000)
+                _logger.WriteLine($"[{_modConfig.ModId}] SteamAPI dll does not appear to be original (pirated copy?) - this may not be supported and could prevent the game from booting.", _logger.ColorRed);
+        }
     }
 
     private delegate void ExceptionDelegate(nint value);
@@ -151,8 +163,8 @@ public partial class Mod : ModBase, IExports // <= Do not Remove.
 
         if (_gameVersion is null)
         {
-            _logger.WriteLine($"[{_modConfig.ModId}] Failed to parse game version? Defaulting to 1.02", _logger.ColorRed);
-            _gameVersion = new Version(1, 0, 2);
+            _logger.WriteLine($"[{_modConfig.ModId}] Failed to parse game version? Defaulting to 1.03", _logger.ColorRed);
+            _gameVersion = new Version(1, 0, 3);
         }
         else
         {

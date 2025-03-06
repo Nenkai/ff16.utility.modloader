@@ -2,7 +2,7 @@
   "ModId": "ff16.utility.modloader",
   "ModName": "Final Fantasy XVI / 16 Mod Loader",
   "ModAuthor": "Nenkai",
-  "ModVersion": "1.1.8",
+  "ModVersion": "1.1.9",
   "ModDescription": "Mod loader for Final Fantasy XVI.",
   "ModDll": "ff16.utility.modloader.dll",
   "ModIcon": "Preview.png",
