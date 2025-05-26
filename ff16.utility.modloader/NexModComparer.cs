@@ -24,11 +24,11 @@ public class NexModComparer
 
         NexTableLayout tableColumnLayout = TableMappingReader.ReadTableLayout(tableName, new Version(1, 0, 0));
 
-        List<NexRowInfo> ogRowInfos = originalNexTable.RowManager.GetAllRowInfos();
+        List<NexRowInfo> ogRowInfos = originalNexTable.RowManager!.GetAllRowInfos();
         for (int i = 0; i < ogRowInfos.Count; i++)
         {
             NexRowInfo ogRowInfo = ogRowInfos[i];
-            if (!modNexTable.RowManager.TryGetRowInfo(out NexRowInfo modRowInfo, ogRowInfo.Key, ogRowInfo.Key2, ogRowInfo.Key3))
+            if (!modNexTable.RowManager!.TryGetRowInfo(out NexRowInfo? modRowInfo, ogRowInfo.Key, ogRowInfo.Key2, ogRowInfo.Key3))
             {
                 // Row was removed by mod file
                 _nexChanges[diffPackName].TryAdd(tableName, []);
@@ -38,8 +38,8 @@ public class NexModComparer
             else
             {
                 // Check for row differences (this should be fine as we're using the same layout for both)
-                var ogRow = NexUtils.ReadRow(tableColumnLayout, originalNexTable.Buffer, ogRowInfo.RowDataOffset);
-                var newRow = NexUtils.ReadRow(tableColumnLayout, modNexTable.Buffer, modRowInfo.RowDataOffset);
+                var ogRow = NexUtils.ReadRow(tableColumnLayout, originalNexTable.Buffer!, ogRowInfo.RowDataOffset);
+                var newRow = NexUtils.ReadRow(tableColumnLayout, modNexTable.Buffer!, modRowInfo.RowDataOffset);
 
                 for (int j = 0; j < ogRow.Count; j++)
                 {
@@ -63,7 +63,7 @@ public class NexModComparer
         }
 
         // Check for rows that the modded nex file potentially added
-        List<NexRowInfo> newRowInfos = modNexTable.RowManager.GetAllRowInfos();
+        List<NexRowInfo> newRowInfos = modNexTable.RowManager!.GetAllRowInfos();
         for (int i = 0; i < newRowInfos.Count; i++)
         {
             NexRowInfo newRowInfo = newRowInfos[i];
@@ -73,7 +73,7 @@ public class NexModComparer
                 _nexChanges[diffPackName].TryAdd(tableName, []);
                 _nexChanges[diffPackName][tableName].TryAdd(modId, new NexTableChange(modId));
 
-                var newRow = NexUtils.ReadRow(tableColumnLayout, modNexTable.Buffer, newRowInfo.RowDataOffset);
+                var newRow = NexUtils.ReadRow(tableColumnLayout, modNexTable.Buffer!, newRowInfo.RowDataOffset);
                 _nexChanges[diffPackName][tableName][modId].InsertedRows.Add((newRowInfo.Key, newRowInfo.Key2, newRowInfo.Key3), newRow);
             }
         }
@@ -201,14 +201,15 @@ public class NexModComparer
                     if (leftArray.Length != rightArray.Length)
                         return false;
 
-                    List<NexStructColumn> customStructFields = layout.CustomStructDefinitions[column.StructTypeName];
+                    NexTableColumnStruct customStructFields = layout.CustomStructDefinitions[column.StructTypeName!];
                     for (int i = 0; i < leftArray.Length; i++)
                     {
                         object[] oldStruct = (object[])leftArray[i];
                         object[] newStruct = (object[])rightArray[i];
-                        for (int j = 0; j < customStructFields.Count; j++)
+
+                        for (int j = 0; j < customStructFields.Columns.Count; j++)
                         {
-                            if (!IsSameNexCell(layout, customStructFields[j], oldStruct[j], newStruct[j]))
+                            if (!IsSameNexCell(layout, customStructFields.Columns[j], oldStruct[j], newStruct[j]))
                                 return false;
                         }
                     }

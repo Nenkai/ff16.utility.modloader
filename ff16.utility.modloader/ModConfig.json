@@ -2,8 +2,8 @@
   "ModId": "ff16.utility.modloader",
   "ModName": "Final Fantasy XVI / 16 Mod Loader",
   "ModAuthor": "Nenkai",
-  "ModVersion": "1.1.9",
-  "ModDescription": "Mod loader for Final Fantasy XVI.",
+  "ModVersion": "1.2.0",
+  "ModDescription": "Mod loader for Final Fantasy XVI. Right click on this mod and 'Configure' to view options.\nModding Website - nenkai.github.io/ffxvi-modding/",
   "ModDll": "ff16.utility.modloader.dll",
   "ModIcon": "Preview.png",
   "ModR2RManagedDll32": "x86/ff16.utility.modloader.dll",
@@ -34,7 +34,7 @@
     }
   },
   "IsUniversalMod": false,
-  "ModDependencies": [ "reloaded.sharedlib.hooks" ],
+  "ModDependencies": [ "Reloaded.Memory.SigScan.ReloadedII", "reloaded.sharedlib.hooks" ],
   "OptionalDependencies": [],
   "SupportedAppId": [
     "ffxvi_demo.exe",

@@ -1,17 +1,18 @@
-﻿using System.Diagnostics;
+﻿using ff16.utility.modloader.Configuration;
+using ff16.utility.modloader.Interfaces;
+using ff16.utility.modloader.Template;
 
-
-using Reloaded.Mod.Interfaces;
-using Reloaded.Mod.Interfaces.Internal;
-using Reloaded.Hooks.Definitions;
-
-using FF16Tools.Pack;
 using FF16Tools.Files.Nex;
 using FF16Tools.Files.Nex.Entities;
+using FF16Tools.Pack;
 
-using ff16.utility.modloader.Configuration;
-using ff16.utility.modloader.Template;
-using ff16.utility.modloader.Interfaces;
+using Reloaded.Hooks.Definitions;
+using Reloaded.Memory.Interfaces;
+using Reloaded.Memory.SigScan.ReloadedII.Interfaces;
+using Reloaded.Mod.Interfaces;
+using Reloaded.Mod.Interfaces.Internal;
+
+using System.Diagnostics;
 
 
 using Windows.Win32;
@@ -56,12 +57,14 @@ public partial class Mod : ModBase, IExports // <= Do not Remove.
     /// </summary>
     private readonly IModConfig _modConfig;
 
+    private static IStartupScanner? _startupScanner = null!;
+
     public FF16ModPackManager _modPackManager;
 
     private string _appLocation;
     private string _appDir;
     private string _tempDir;
-    private Version _gameVersion;
+    private Version _gameVersion = new Version(1, 0, 3); // Default to 1.0.3.
 
     public Mod(ModContext context)
     {
@@ -82,18 +85,29 @@ public partial class Mod : ModBase, IExports // <= Do not Remove.
 #endif
 
         _appLocation = _modLoader.GetAppConfig().AppLocation;
-        _appDir = Path.GetDirectoryName(_appLocation);
+        _appDir = Path.GetDirectoryName(_appLocation)!;
         _tempDir = Path.Combine(_modLoader.GetDirectoryForModId(_modConfig.ModId), "staging");
         bool isDemo = _modLoader.GetAppConfig().AppId == "ffxvi_demo.exe";
 
         CheckSteamAPIDll();
         GetGameVersion();
+
         HookExceptionHandler();
+        NeutralizeAntiDebug();
 
         ClearDiffPackState();
 
-        _modPackManager = new FF16ModPackManager(_modConfig, _modLoader, _logger, _configuration, _gameVersion);
+        if (IsRunningUnpacked())
+        {
+            _logger.WriteLine($"[{_modConfig.ModId}] //////////////////////////////////", _logger.ColorYellow);
+            _logger.WriteLine($"[{_modConfig.ModId}] WARNING: Game is running unpacked.", _logger.ColorYellow);
+            _logger.WriteLine($"[{_modConfig.ModId}]   Assuming you're a modder and you know what you're doing.", _logger.ColorYellow);
+            _logger.WriteLine($"[{_modConfig.ModId}]   File-based mods aren't currently supported this way.", _logger.ColorYellow);
+            _logger.WriteLine($"[{_modConfig.ModId}] //////////////////////////////////", _logger.ColorYellow);
+            return;
+        }
         
+        _modPackManager = new FF16ModPackManager(_modConfig, _modLoader, _logger, _configuration, _gameVersion);
         if (!_modPackManager.Initialize(Path.Combine(_appDir, "data"), _tempDir, isDemo: isDemo))
         {
             _logger.WriteLine($"[{_modConfig.ModId}] Pack manager failed to initialize.", _logger.ColorRed);
@@ -101,7 +115,6 @@ public partial class Mod : ModBase, IExports // <= Do not Remove.
         }
 
         _modLoader.AddOrReplaceController<IFF16ModPackManager>(_owner, _modPackManager);
-
         _modLoader.ModLoading += ModLoading;
         _modLoader.OnModLoaderInitialized += OnAllModsLoaded;
     }
@@ -118,7 +131,7 @@ public partial class Mod : ModBase, IExports // <= Do not Remove.
     }
 
     private delegate void ExceptionDelegate(nint value);
-    private static IHook<ExceptionDelegate> ExceptionHook;
+    private static IHook<ExceptionDelegate>? ExceptionHook;
 
     private void HookExceptionHandler()
     {
@@ -128,21 +141,87 @@ public partial class Mod : ModBase, IExports // <= Do not Remove.
         var kernel32 = PInvoke.GetModuleHandle("kernel32.dll");
         if (kernel32 is null)
         {
-            _logger.WriteLine("Could not load kernel32 module - exception handler won't be removed", _logger.ColorRed);
+            _logger.WriteLine($"[{_modConfig.ModId}] Could not load kernel32 module - exception handler won't be removed", _logger.ColorRed);
             return;
         }
 
         var unhandledExceptionFilter = PInvoke.GetProcAddress(kernel32, "SetUnhandledExceptionFilter");
         if (unhandledExceptionFilter.IsNull)
         {
-            _logger.WriteLine("SetUnhandledExceptionFilter not found in kernel32 module - exception handler won't be removed", _logger.ColorRed);
+            _logger.WriteLine($"[{_modConfig.ModId}] SetUnhandledExceptionFilter not found in kernel32 module - exception handler won't be removed", _logger.ColorRed);
             return;
         }
 
-        ExceptionHook = _hooks.CreateHook<ExceptionDelegate>(Hook, unhandledExceptionFilter).Activate();
+        if (_hooks is null)
+        {
+            _logger.WriteLine($"[{_modConfig.ModId}] IReloadedHooks is null? Reloaded.SharedLib.Hooks was not loaded?", _logger.ColorRed);
+            return;
+        }
+
+        ExceptionHook = _hooks.CreateHook<ExceptionDelegate>(ExceptionHook_Impl, unhandledExceptionFilter).Activate();
     }
 
-    private void Hook(nint value)
+    private void NeutralizeAntiDebug()
+    {
+        if (!_configuration.DisableAntiDebugger)
+            return;
+
+        var startupScannerController = _modLoader.GetController<IStartupScanner>();
+        if (startupScannerController == null || !startupScannerController.TryGetTarget(out _startupScanner))
+        {
+            _logger.WriteLine($"[{_modConfig.ModId}] Could not fetch IStartupScanner for anti-debug?", _logger.ColorRed);
+            return;
+        }
+
+        _logger.WriteLine($"[{_modConfig.ModId}] Attempting to disable anti-debug..");
+
+        var processAddress = Process.GetCurrentProcess().MainModule!.BaseAddress;
+
+        // App entrypoint IsDebuggerPresent check.
+        _startupScanner.AddMainModuleScan("FF 15 ?? ?? ?? ?? 85 C0 74 ?? 33 C0 E9", (e) =>
+        {
+            nuint currentAddress = (nuint)(processAddress + e.Offset);
+            WriteBytes(ref currentAddress, [0x90, 0x90, 0x90, 0x90, 0x90, 0x90]);          // FF 15 43 49 8C 00 - call    cs:IsDebuggerPresent
+            WriteBytes(ref currentAddress, [0x90, 0x90]);                                  // 85 C0             - test    eax, eax
+            WriteBytes(ref currentAddress, [0x90, 0x90]);                                  // 74 07             - jz      short loc_7FF63BD62BB0
+            WriteBytes(ref currentAddress, [0x90, 0x90]);                                  // 33 C0             - xor     eax, eax
+            WriteBytes(ref currentAddress, [0x90, 0x90, 0x90, 0x90, 0x90]);                // E9 76 01 00 00    - jmp     loc_7FF63BD62D26
+            _logger.WriteLine($"[{_modConfig.ModId}] Entrypoint anti-debug neutralized.", _logger.ColorGreenLight);
+        });
+
+        // Update loop anti-debug check.
+        _startupScanner.AddMainModuleScan("FF 15 ?? ?? ?? ?? 85 C0 0F 85 ?? ?? ?? ?? 48 8B 0D", (e) =>
+        {
+            // This one checks for debugger present + various graphics analyzers in a specific function
+            // >> Pix (winPixGpuCapturer.dll)
+            // >> Nvidia Nsight Graphics (Nvda.Graphics.Interception.dll)
+            // >> Intel Graphics Performance Analyzers (capture-x64.dll/d3d12-state-tracker-x64.dll)
+            // >> RenderDoc (renderdoc.dll) + GUID check with d3d12Device->QueryInterface({ 0xa7aa6116, 0x9c8d, 0x4bba, { 0x90, 0x83, 0xb4, 0xd8, 0x16, 0xb7, 0x1b, 0x78 } })
+
+            // if ( IsDebuggerPresent() || g_GraphicsSystem && GraphicsSystem::CheckGraphicsCapturer(g_GraphicsSystem) )
+            // {
+            //    g_AppPlatform->DebuggerDetected = 1;
+            //    goto skip_steam_eos_callback_tick;
+            // }
+            // [...]
+            // return g_AppPlatform->DebuggerDetected == 0;
+
+            // nop the check.
+            nuint currentAddress = (nuint)(processAddress + e.Offset);
+            WriteBytes(ref currentAddress, [0x90, 0x90, 0x90, 0x90, 0x90, 0x90]);          // FF 15 13 65 8C 00    - call    cs:IsDebuggerPresent
+            WriteBytes(ref currentAddress, [0x90, 0x90]);                                  // 85 C0                - test    eax, eax
+            WriteBytes(ref currentAddress, [0x90, 0x90, 0x90, 0x90, 0x90, 0x90]);          // 0F 85 0D 01 00 00    - jnz     loc_7FF63BD610EA
+            WriteBytes(ref currentAddress, [0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90]);    // 48 8B 0D 8C 26 D9 01 - mov     rcx, cs:g_GraphicsSystem
+            WriteBytes(ref currentAddress, [0x90, 0x90, 0x90]);                            // 48 85 C9             - test    rcx, rcx
+            WriteBytes(ref currentAddress, [0x90, 0x90]);                                  // 74 0D                - jz      short loc_7FF63BD60FF6
+            WriteBytes(ref currentAddress, [0x90, 0x90, 0x90, 0x90, 0x90]);                // E8 32 8B 07 00       - call    GraphicsSystem__CheckGraphcsCapturer
+            WriteBytes(ref currentAddress, [0x90, 0x90]);                                  // 84 C0                - test    al, al
+            WriteBytes(ref currentAddress, [0x90, 0x90, 0x90, 0x90, 0x90, 0x90]);          // 0F 85 F4 00 00 00    - jnz     loc_7FF63BD610EA
+            _logger.WriteLine($"[{_modConfig.ModId}] Update loop anti-Debug neutralized.", _logger.ColorGreenLight);
+        });
+    }
+
+    private void ExceptionHook_Impl(nint value)
     {
         // nullsub
     }
@@ -150,26 +229,27 @@ public partial class Mod : ModBase, IExports // <= Do not Remove.
     private void GetGameVersion()
     {
         FileVersionInfo fileVersionInfo = FileVersionInfo.GetVersionInfo(_appLocation);
-        string productVersion = fileVersionInfo.ProductVersion;
+        string? productVersion = fileVersionInfo.ProductVersion;
 
-        string[] spl = productVersion.Split('.');
-        if (spl.Length == 2)
+        if (string.IsNullOrEmpty(productVersion))
         {
-            if (int.TryParse(productVersion.Split('.')[0], out int major) && int.TryParse(productVersion.Split('.')[1], out int minor))
-            {
-                _gameVersion = new Version(major, 0, minor);
-            }
+            _logger.WriteLine($"[{_modConfig.ModId}] Failed to parse game version? Executable 'ProductVersion' was not set. " +
+                $"Defaulted to {_gameVersion.Major}.{_gameVersion.Minor}{_gameVersion.Build}", _logger.ColorRed);
+            return;
         }
 
-        if (_gameVersion is null)
+        string[] spl = productVersion.Split('.');
+        if (spl.Length == 2 && int.TryParse(productVersion.Split('.')[0], out int major) && int.TryParse(productVersion.Split('.')[1], out int minor))
         {
-            _logger.WriteLine($"[{_modConfig.ModId}] Failed to parse game version? Defaulting to 1.03", _logger.ColorRed);
-            _gameVersion = new Version(1, 0, 3);
+            _gameVersion = new Version(major, 0, minor);
         }
         else
         {
-            _logger.WriteLine($"[{_modConfig.ModId}] Game Version: {productVersion}");
+            _logger.WriteLine($"[{_modConfig.ModId}] Failed to parse game version?" +
+                $"Defaulted to {_gameVersion.Major}.{_gameVersion.Minor}{_gameVersion.Build}", _logger.ColorRed);
         }
+
+        _logger.WriteLine($"[{_modConfig.ModId}] Game Version: {productVersion}");
     }
 
     /// <summary>
@@ -178,6 +258,9 @@ public partial class Mod : ModBase, IExports // <= Do not Remove.
     private void ClearDiffPackState()
     {
         string dataDir = Path.Combine(_appDir, "data");
+        if (!Directory.Exists(dataDir))
+            return;
+
         foreach (var file in Directory.GetFiles(dataDir))
         {
             if (file.Contains(".diff."))
@@ -238,7 +321,7 @@ public partial class Mod : ModBase, IExports // <= Do not Remove.
     {
         const string uiNxdPath = "nxd/ui.nxd";
 
-        FF16PackPathUtil.TryGetPackNameForPath(uiNxdPath, out string packName, out _, _modPackManager.IsDemo);
+        FF16PackPathUtil.TryGetPackNameForPath(uiNxdPath, out string? packName, out _, _modPackManager.IsDemo);
 
         string tempModLoaderDataDir = Path.Combine(_tempDir, "data");
         try
@@ -246,15 +329,15 @@ public partial class Mod : ModBase, IExports // <= Do not Remove.
             NexTableLayout tableColumnLayout = TableMappingReader.ReadTableLayout("ui", _gameVersion);
             foreach (var locale in FF16PackPathUtil.PackLocales)
             {
-                using var nexFileData = _modPackManager.PackManager.GetFileDataFromPack(uiNxdPath, $"{packName}.{locale}");
+                using var nexFileData = _modPackManager.PackManager!.GetFileDataFromPack(uiNxdPath, $"{packName}.{locale}");
                 NexDataFile nexFile = new NexDataFile();
                 nexFile.Read(nexFileData.Span.ToArray());
 
-                var versionRow = nexFile.RowManager.GetRowInfo(19);
+                var versionRow = nexFile.RowManager!.GetRowInfo(19);
                 var builder = new NexDataFileBuilder(tableColumnLayout);
                 foreach (var row in nexFile.RowManager.GetAllRowInfos())
                 {
-                    List<object> cells = NexUtils.ReadRow(tableColumnLayout, nexFile.Buffer, row.RowDataOffset);
+                    List<object> cells = NexUtils.ReadRow(tableColumnLayout, nexFile.Buffer!, row.RowDataOffset);
                     if (row.Key == 19)
                     {
                         var mods = _modLoader.GetActiveMods()
@@ -299,7 +382,7 @@ public partial class Mod : ModBase, IExports // <= Do not Remove.
                 }
 
                 string stagingNxdPath = Path.Combine(tempModLoaderDataDir, $"nxd/{locale}/ui.nxd");
-                Directory.CreateDirectory(Path.GetDirectoryName(stagingNxdPath));
+                Directory.CreateDirectory(Path.GetDirectoryName(stagingNxdPath)!);
 
                 using (var fs = new FileStream(stagingNxdPath, FileMode.Create))
                     builder.Write(fs);
@@ -328,6 +411,21 @@ public partial class Mod : ModBase, IExports // <= Do not Remove.
         _modPackManager.AddModdedFile(_modConfig.ModId, modDir, titleUib);
     }
 
+    private bool IsRunningUnpacked()
+    {
+        string dataDir = Path.Combine(_appDir, "data");
+        bool unpackedDirExists = Directory.Exists(Path.Combine(_appDir, "resources_win", "release", "master")) ||
+                                 Directory.Exists(Path.Combine(_appDir, "resources", "release", "master"));
+
+        return !Directory.Exists(dataDir) && unpackedDirExists;
+    }
+
+    private void WriteBytes(ref nuint currentAddress, Span<byte> bytes)
+    {
+        Reloaded.Memory.Memory.Instance.SafeWrite(currentAddress, bytes);
+        currentAddress += (uint)bytes.Length;
+    }
+
 
     #region Standard Overrides
     public override void ConfigurationUpdated(Config configuration)
@@ -351,17 +449,17 @@ public class ModPack
     /// <summary>
     /// Main pack name regardless of locale, i.e "0007".
     /// </summary>
-    public string MainPackName { get; set; }
+    public required string MainPackName { get; set; }
 
     /// <summary>
     /// Pack name including locale, i.e "0007" or "0007.en".
     /// </summary>
-    public string BaseLocalePackName { get; set; }
+    public required string BaseLocalePackName { get; set; }
 
     /// <summary>
     /// Diff pack name, i.e "0007.diff" or "0007.diff.en".
     /// </summary>
-    public string DiffPackName { get; set; }
+    public required string DiffPackName { get; set; }
 
     /// <summary>
     /// Modded files for this pack.

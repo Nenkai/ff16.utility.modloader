@@ -16,6 +16,7 @@ using FF16Tools.Pack.Packing;
 using ff16.utility.modloader.Configuration;
 using ff16.utility.modloader.Interfaces;
 using Syroot.BinaryData;
+using System.Diagnostics.CodeAnalysis;
 
 namespace ff16.utility.modloader;
 
@@ -47,16 +48,19 @@ public class FF16ModPackManager : IFF16ModPackManager
     /// <summary>
     /// Underlying pack manager.
     /// </summary>
-    public FF16PackManager PackManager { get; private set; }
+    [MemberNotNullWhen(true, nameof(Initialized))]
+    public FF16PackManager? PackManager { get; private set; }
 
     /// <summary>
     /// Data directory containing packs.
     /// </summary>
+    [MemberNotNullWhen(true, nameof(Initialized))]
     public string DataDirectory { get; private set; }
 
     /// <summary>
     /// Folder to use for temp files.
     /// </summary>
+    [MemberNotNullWhen(true, nameof(Initialized))]
     public string TempFolder { get; private set; }
 
     /// <summary>
@@ -113,9 +117,12 @@ public class FF16ModPackManager : IFF16ModPackManager
     /// <inheritdoc/>
     public byte[] GetFileData(string gamePath, string packSuffix = "")
     {
+        if (PackManager is null)
+            throw new InvalidOperationException("Unable to get file data - pack manager is not initialized.");
+
         if (!string.IsNullOrWhiteSpace(packSuffix))
         {
-            if (FF16PackPathUtil.TryGetPackNameForPath(gamePath, out string packName, out _))
+            if (FF16PackPathUtil.TryGetPackNameForPath(gamePath, out string? packName, out _))
                 return PackManager.GetFileDataBytesFromPack(gamePath, $"{packName}.{packSuffix}");
             else // whatever, put in 0000
                 return PackManager.GetFileDataBytesFromPack(gamePath, $"0000.{packSuffix}");
@@ -127,9 +134,12 @@ public class FF16ModPackManager : IFF16ModPackManager
     /// <inheritdoc/>
     public bool FileExists(string gamePath, string packSuffix = "")
     {
+        if (PackManager is null)
+            throw new InvalidOperationException("Unable to get file data - pack manager is not initialized.");
+
         if (!string.IsNullOrWhiteSpace(packSuffix))
         {
-            if (FF16PackPathUtil.TryGetPackNameForPath(gamePath, out string packName, out _))
+            if (FF16PackPathUtil.TryGetPackNameForPath(gamePath, out string? packName, out _))
                 return PackManager.GetFileInfoFromPack(gamePath, $"{packName}.{packSuffix}") != null;
         }
 
@@ -161,7 +171,7 @@ public class FF16ModPackManager : IFF16ModPackManager
 
         string baseDir = Path.Combine(TempFolder, modId);
         string fullPath = Path.Combine(baseDir, gamePath);
-        Directory.CreateDirectory(Path.GetDirectoryName(fullPath));
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
 
         File.WriteAllBytes(fullPath, data);
 
@@ -180,13 +190,13 @@ public class FF16ModPackManager : IFF16ModPackManager
         string topLevel = GetTopLevelDir(relPath);
         string possiblePackDir = Path.Combine(baseDir, topLevel);
 
-        string packName;
+        string? packName;
         string gamePath;
 
         if (!string.IsNullOrWhiteSpace(topLevel))
         {
             // Is the file in a pack-named folder?
-            if (Directory.Exists(possiblePackDir) && PackManager.PackFiles.ContainsKey(topLevel))
+            if (Directory.Exists(possiblePackDir) && PackManager!.PackFiles.ContainsKey(topLevel))
             {
                 packName = topLevel;
                 gamePath = Path.GetRelativePath(possiblePackDir, localPath);
@@ -194,7 +204,7 @@ public class FF16ModPackManager : IFF16ModPackManager
             else
             {
                 // Is it a regular path and we can guess the pack name?
-                if (FF16PackPathUtil.TryGetPackNameForPath(relPath, out packName, out string gamePathFolder, demo: IsDemo))
+                if (FF16PackPathUtil.TryGetPackNameForPath(relPath, out packName, out string? gamePathFolder, demo: IsDemo))
                 {
                     gamePath = relPath;
                 }
@@ -202,6 +212,7 @@ public class FF16ModPackManager : IFF16ModPackManager
                 {
                     // Whatever, fit in 0001. File infos are all merged in the game so it doesn't matter in which pack they are in.
                     packName = "0001";
+                    gamePathFolder = relPath.Replace('\\', '/').Split('/')[0];
                     gamePath = relPath;
                 }
 
@@ -239,7 +250,7 @@ public class FF16ModPackManager : IFF16ModPackManager
 
         Print($"{modId}: Adding file '{gamePath}' ({packName})");
 
-        if (!modPack.Files.TryGetValue(packFilePath, out FF16ModFile modFile))
+        if (!modPack.Files.TryGetValue(packFilePath, out FF16ModFile? modFile))
         {
             modFile = new FF16ModFile()
             {
@@ -351,14 +362,16 @@ public class FF16ModPackManager : IFF16ModPackManager
     {
         string diffPackName = GetPackDiffName(packName);
 
-        if (!_modPackFiles.TryGetValue(diffPackName, out ModPack modPack))
+        if (!_modPackFiles.TryGetValue(diffPackName, out ModPack? modPack))
         {
             string[] spl = diffPackName.Split('.');
 
-            modPack = new ModPack();
-            modPack.MainPackName = spl[0];
-            modPack.BaseLocalePackName = packName;
-            modPack.DiffPackName = diffPackName;
+            modPack = new ModPack
+            {
+                MainPackName = spl[0],
+                BaseLocalePackName = packName,
+                DiffPackName = diffPackName
+            };
             _modPackFiles.TryAdd(diffPackName, modPack);
 
             // If the pack we're adding was a localized one (i.e 0001.diff.en.pac), we need to make sure we also create
@@ -367,10 +380,12 @@ public class FF16ModPackManager : IFF16ModPackManager
             {
                 string baseDiffPack = string.Join(".", spl[0], spl[1]);
 
-                var baseModPack = new ModPack();
-                baseModPack.MainPackName = spl[0];
-                baseModPack.BaseLocalePackName = $"{spl[0]}.{spl[2]}";
-                baseModPack.DiffPackName = baseDiffPack;
+                var baseModPack = new ModPack
+                {
+                    MainPackName = spl[0],
+                    BaseLocalePackName = $"{spl[0]}.{spl[2]}",
+                    DiffPackName = baseDiffPack
+                };
                 _modPackFiles.TryAdd(baseDiffPack, baseModPack);
             }
         }
@@ -388,13 +403,13 @@ public class FF16ModPackManager : IFF16ModPackManager
     /// <exception cref="FileNotFoundException"></exception>
     private void RecordNexChanges(string modId, string packName, string nexGamePath, string modNexFilePath)
     {
-        if (PackManager.GetFileInfo(nexGamePath, includeDiff: false) is null)
+        if (PackManager!.GetFileInfo(nexGamePath, includeDiff: false) is null)
         {
             PrintWarning($"Mod '{modId}' edits nex table '{nexGamePath}' which is unrecognized.");
             return;
         }
 
-        MemoryOwner<byte> ogNexFileData = null;
+        MemoryOwner<byte>? ogNexFileData = null;
 
         try
         {
@@ -450,7 +465,7 @@ public class FF16ModPackManager : IFF16ModPackManager
 
                 // Not my finest work
                 string ogPackName = nexPack.Key.Replace(".diff", string.Empty);
-                using MemoryOwner<byte> ogNexFileData = PackManager.GetFileInfoFromPack(nexGamePath, ogPackName) is not null ?
+                using MemoryOwner<byte> ogNexFileData = PackManager!.GetFileInfoFromPack(nexGamePath, ogPackName) is not null ?
                     PackManager.GetFileDataFromPack(nexGamePath, ogPackName) :
                     PackManager.GetFileData(nexGamePath, includeDiff: false);
 
@@ -459,10 +474,10 @@ public class FF16ModPackManager : IFF16ModPackManager
 
                 var nexBuilder = new NexDataFileBuilder(tableColumnLayout);
 
-                List<NexRowInfo> rowInfos = originalTableFile.RowManager.GetAllRowInfos();
+                List<NexRowInfo> rowInfos = originalTableFile.RowManager!.GetAllRowInfos();
                 if (originalTableFile.Type == NexTableType.TripleKeyed)
                 {
-                    NexTripleKeyedRowTableManager rowSetManager = originalTableFile.RowManager as NexTripleKeyedRowTableManager;
+                    NexTripleKeyedRowTableManager rowSetManager = (NexTripleKeyedRowTableManager)originalTableFile.RowManager;
                     foreach (var dk in rowSetManager.GetRowSets())
                     {
                         nexBuilder.AddTripleKeyedSet(dk.Key);
@@ -472,7 +487,7 @@ public class FF16ModPackManager : IFF16ModPackManager
                 }
                 else if (originalTableFile.Type == NexTableType.DoubleKeyed)
                 {
-                    NexDoubleKeyedRowTableManager rowSetManager = originalTableFile.RowManager as NexDoubleKeyedRowTableManager;
+                    NexDoubleKeyedRowTableManager rowSetManager = (NexDoubleKeyedRowTableManager)originalTableFile.RowManager;
                     foreach (var set in rowSetManager.GetRowSets())
                         nexBuilder.AddDoubleKeyedSet(set.Key);
                 }
@@ -480,7 +495,7 @@ public class FF16ModPackManager : IFF16ModPackManager
                 for (int i = 0; i < rowInfos.Count; i++)
                 {
                     var row = rowInfos[i];
-                    List<object> cells = NexUtils.ReadRow(tableColumnLayout, originalTableFile.Buffer, row.RowDataOffset);
+                    List<object> cells = NexUtils.ReadRow(tableColumnLayout, originalTableFile.Buffer!, row.RowDataOffset);
                     nexBuilder.AddRow(row.Key, row.Key2, row.Key3, cells);
                 }
 
@@ -534,7 +549,7 @@ public class FF16ModPackManager : IFF16ModPackManager
                 }
 
                 string stagingNxdPath = Path.Combine(TempFolder, nexPack.Key, nexGamePath);
-                Directory.CreateDirectory(Path.GetDirectoryName(stagingNxdPath));
+                Directory.CreateDirectory(Path.GetDirectoryName(stagingNxdPath)!);
 
                 using (var fs = new FileStream(stagingNxdPath, FileMode.Create))
                     nexBuilder.Write(fs);
