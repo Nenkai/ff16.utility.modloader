@@ -319,17 +319,13 @@ public partial class Mod : ModBase, IExports // <= Do not Remove.
 
     public void ApplyMainMenuModInfo()
     {
-        const string uiNxdPath = "nxd/ui.nxd";
-
-        FF16PackPathUtil.TryGetPackNameForPath(uiNxdPath, out string? packName, out _, _modPackManager.IsDemo);
-
         string tempModLoaderDataDir = Path.Combine(_tempDir, "data");
         try
         {
-            NexTableLayout tableColumnLayout = TableMappingReader.ReadTableLayout("ui", _gameVersion);
+            NexTableLayout tableColumnLayout = TableMappingReader.ReadTableLayout("ui", _gameVersion, "faith");
             foreach (var locale in FF16PackPathUtil.PackLocales)
             {
-                using var nexFileData = _modPackManager.PackManager!.GetFileDataFromPack(uiNxdPath, $"{packName}.{locale}");
+                using var nexFileData = _modPackManager.PackManager!.GetFileData($"nxd/ui.{locale}.nxd");
                 NexDataFile nexFile = new NexDataFile();
                 nexFile.Read(nexFileData.Span.ToArray());
 

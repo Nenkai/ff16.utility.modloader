@@ -59,7 +59,7 @@ public interface IFF16ModPackManager
     /// Returns whether a game file exists (from base/vanilla packs).
     /// </summary>
     /// <param name="gamePath">Game path, e.g 'nxd/photocameraparam.nxd'</param>
-    /// <param name="packSuffix">Pack suffix, usually language, if applicable. If not provided, the first match will be returned.
+    /// <param name="packSuffix"><b>DEPRECATED! Use gamePath with 'nxd/{filename}.{locale}.nxd' scheme.</b><br/><br/>
     /// One of:<br/>
     /// "ar" - Arabic<br/>
     /// "cs" - Simplified Chinese<br/>
@@ -85,7 +85,8 @@ public interface IFF16ModPackManager
     /// Gets a game file (from base/vanilla packs).
     /// </summary>
     /// <param name="gamePath">Game path, e.g 'nxd/photocameraparam.nxd'</param>
-    /// <param name="packSuffix">Pack suffix, usually language, if applicable. If not provided, the first match will be returned.
+    /// <param name="packSuffix"><b>DEPRECATED! Use gamePath with 'nxd/{filename}.{locale}.nxd' scheme.</b><br/><br/>
+    /// Pack suffix, usually language, if applicable. If not provided, the first match will be returned.
     /// One of:<br/>
     /// "ar" - Arabic<br/>
     /// "cs" - Simplified Chinese<br/>
@@ -115,9 +116,10 @@ public interface IFF16ModPackManager
     /// <param name="gamePath">File path.
     /// <br>Examples:</br>
     /// <code>
-    /// "0007/nxd/gamemap.nxd" -> Pack 0007, path = nxd/gamemap.nxd
-    /// "nxd/en/ui.nxd" -> Pack 0007.en, path = nxd/ui.nxd
-    /// "system/graphics/atmosphere/texture/endof/tsinglemie_atms.tex" -> Pack 0028, path = system/graphics/atmosphere/texture/endof/tsinglemie_atms.tex
+    /// "nxd/gamemap.nxd" -> Pack 0007, path = nxd/gamemap.nxd
+    /// "nxd/ui.en.nxd" -> Pack 0007.en, path = nxd/ui.en.nxd
+    /// (Old) "0007/nxd/gamemap.nxd" -> Pack 0007, path = nxd/gamemap.nxd
+    /// (Old) "nxd/en/ui.nxd" -> Pack 0007.en, path = nxd/ui.nxd
     /// </code></param>
     /// <param name="file">File bytes.</param>
     public void AddModdedFile(string modId, string gamePath, byte[] file);
@@ -130,9 +132,10 @@ public interface IFF16ModPackManager
     /// <param name="localPath">Local path to the file. If it starts with a pack name (relative to baseDir), it will determine the pack name.
     /// <br>Examples:</br>
     /// <code>
-    /// "baseDir/0007/nxd/gamemap.nxd" -> Pack 0007, path = nxd/gamemap.nxd
-    /// "baseDir/nxd/en/ui.nxd" -> Pack 0007.en, path = nxd/ui.nxd
-    /// "baseDir/system/graphics/atmosphere/texture/endof/tsinglemie_atms.tex" -> Pack 0028, path = system/graphics/atmosphere/texture/endof/tsinglemie_atms.tex
+    /// "nxd/gamemap.nxd" -> Pack 0007, path = nxd/gamemap.nxd
+    /// "nxd/ui.en.nxd" -> Pack 0007.en, path = nxd/ui.en.nxd
+    /// (Old) "0007/nxd/gamemap.nxd" -> Pack 0007, path = nxd/gamemap.nxd
+    /// (Old) "nxd/en/ui.nxd" -> Pack 0007.en, path = nxd/ui.nxd
     /// </code>
     /// </param>
     public void AddModdedFile(string modId, string baseDir, string localPath);

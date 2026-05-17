@@ -17,6 +17,7 @@ using ff16.utility.modloader.Configuration;
 using ff16.utility.modloader.Interfaces;
 using Syroot.BinaryData;
 using System.Diagnostics.CodeAnalysis;
+using System.Reflection.Metadata.Ecma335;
 
 namespace ff16.utility.modloader;
 
@@ -98,7 +99,7 @@ public class FF16ModPackManager : IFF16ModPackManager
         try
         {
             PackManager = new FF16PackManager(_loggerFactory);
-            PackManager.Open(dataDir);
+            PackManager.Open(dataDir, "faith");
         }
         catch (Exception ex)
         {
@@ -190,6 +191,17 @@ public class FF16ModPackManager : IFF16ModPackManager
         string topLevel = GetTopLevelDir(relPath);
         string possiblePackDir = Path.Combine(baseDir, topLevel);
 
+        // Locale packs's files don't actually contain their locale in their names once built because the pack itself does.
+        // So 0007.en will actually be built with 'nxd/ui.nxd'. It is accessed with 'nxd/ui.en.nxd'
+        // This is how the engine works.
+
+        // [Backwards compatibility]
+        // We used to determine a pack's main folder name through this file
+        // .path (text file) used to contain the main parent dir for each pack.
+        // Obsolete. We keep a list of our own.
+        if (Path.GetFileName(relPath) == ".path")
+            return;
+
         string? packName;
         string gamePath;
 
@@ -200,11 +212,22 @@ public class FF16ModPackManager : IFF16ModPackManager
             {
                 packName = topLevel;
                 gamePath = Path.GetRelativePath(possiblePackDir, localPath);
+
+                // if it's in a locale folder, so ensure that the file itself has the locale too
+                string[] packSpl = topLevel.Split('.');
+                if (packSpl.Length >= 2)
+                {
+                    string possibleLocale = packSpl[^1];
+                    if (FF16PackPathUtil.PackLocales.Contains(possibleLocale))
+                    {
+                        gamePath = AddLocaleToPath(gamePath, possibleLocale);
+                    }
+                }
             }
             else
             {
                 // Is it a regular path and we can guess the pack name?
-                if (FF16PackPathUtil.TryGetPackNameForPath(relPath, out packName, out string? gamePathFolder, demo: IsDemo))
+                if (FF16PackPathUtil.TryGetPackNameForPath(relPath, out packName, out string? rootPackFolder, demo: IsDemo))
                 {
                     gamePath = relPath;
                 }
@@ -212,19 +235,30 @@ public class FF16ModPackManager : IFF16ModPackManager
                 {
                     // Whatever, fit in 0001. File infos are all merged in the game so it doesn't matter in which pack they are in.
                     packName = "0001";
-                    gamePathFolder = relPath.Replace('\\', '/').Split('/')[0];
+                    rootPackFolder = relPath.Replace('\\', '/').Split('/')[0];
                     gamePath = relPath;
                 }
 
-                // Try to translate nxd/en/ to 0007.en
-                string relativeToBase = Path.GetRelativePath(gamePathFolder, relPath);
-                string possibleLocale = GetTopLevelDir(relativeToBase);
+                // [Backwards compatibility]
+                // Try to translate nxd/en/ to 0007.en, and nxd/pl/ui.nxd to nxd/ui.pl.nxd
+                // These ones are here for mod backwards compatibility purposes.
+                // Before we knew the engine actually wanted files formatted that way ({file}.{locale}.{extension}).
+                string relativeToPackBase = Path.GetRelativePath(rootPackFolder, relPath);
+
+                // "nxd/XX/..." -> XX is a known locale?
+                string possibleLocale = GetTopLevelDir(relativeToPackBase);
                 if (!string.IsNullOrWhiteSpace(possibleLocale) && FF16PackPathUtil.PackLocales.Contains(possibleLocale))
                 {
                     packName = $"{packName}.{possibleLocale}";
+                    string fileName = AddLocaleToPath(Path.GetFileName(relPath), possibleLocale);
 
-                    string localeContentsDir = Path.GetRelativePath(Path.Combine(gamePathFolder, possibleLocale), relPath);
-                    gamePath = Path.Combine(gamePathFolder, localeContentsDir);
+                    // extract middle part, i.e "en\whatever\whatever2\ui.nxd" -> "whatever\whatever2"
+                    string dir = Path.GetDirectoryName(relativeToPackBase)!;
+                    int separatorIndex = dir.IndexOf(Path.DirectorySeparatorChar);
+                    string middle = separatorIndex >= 0 ? dir.Substring(separatorIndex + 1) : string.Empty;
+
+                    // "nxd" + whatever was in between minus original locale dir + filename, with locale extension
+                    gamePath = Path.Combine(rootPackFolder, middle, fileName);
                 }
             }
         }
@@ -235,32 +269,28 @@ public class FF16ModPackManager : IFF16ModPackManager
             packName = "0001";
         }
 
-        string packFilePath = FF16PackPathUtil.NormalizePath(gamePath);
-
-        // Deprecated. We determine these from a folder name to pack list.
-        if (packFilePath.Contains(".path"))
-            return;
+        gamePath = FF16PackPathUtil.NormalizePath(gamePath);
 
         ModPack modPack = GetOrAddDiffPack(packName);
         if (_configuration.MergeNexFileChanges && IsNexFile(localPath))
         {
-            RecordNexChanges(modId, packName, packFilePath, localPath);
+            RecordNexChanges(modId, packName, gamePath, localPath);
             return;
         }
 
         Print($"{modId}: Adding file '{gamePath}' ({packName})");
 
-        if (!modPack.Files.TryGetValue(packFilePath, out FF16ModFile? modFile))
+        if (!modPack.Files.TryGetValue(gamePath, out FF16ModFile? modFile))
         {
             modFile = new FF16ModFile()
             {
                 ModIdOwner = modId,
                 LocalPath = localPath,
-                GamePath = packFilePath,
+                GamePath = gamePath,
             };
 
-            modPack.Files.TryAdd(packFilePath, modFile);
-            _moddedFiles.TryAdd(packFilePath, modFile);
+            modPack.Files.TryAdd(gamePath, modFile);
+            _moddedFiles.TryAdd(gamePath, modFile);
         }
         else
         {
@@ -270,8 +300,18 @@ public class FF16ModPackManager : IFF16ModPackManager
             modFile.ModIdOwner = modId;
             modFile.LocalPath = localPath;
 
-            _moddedFiles[packFilePath] = modFile;
+            _moddedFiles[gamePath] = modFile;
         }
+    }
+
+    private static string AddLocaleToPath(string path, string locale)
+    {
+        string? dir = Path.GetDirectoryName(path);
+        string fileName = Path.GetFileName(path);
+        List<string> parts = fileName.Split('.').ToList();
+        parts.Insert(parts.Count - 1, locale);
+        fileName = string.Join(".", parts);
+        return FF16PackPathUtil.NormalizePath(Path.Combine(dir ?? string.Empty, fileName));
     }
 
     /// </inheritdoc>
@@ -405,8 +445,21 @@ public class FF16ModPackManager : IFF16ModPackManager
     {
         if (PackManager!.GetFileInfo(nexGamePath, includeDiff: false) is null)
         {
-            PrintWarning($"Mod '{modId}' edits nex table '{nexGamePath}' which is unrecognized.");
-            return;
+            // [Backwards compatibility]
+            // Some mods don't provide the locale for files they are editing.
+            // Enforce .en if that one does exist
+
+            string localeFile = AddLocaleToPath(nexGamePath, "en");
+            if (PackManager!.GetFileInfo(localeFile, includeDiff: false) is null)
+            {
+                PrintError($"Mod '{modId}' edits nex table '{nexGamePath}' which is unrecognized. This file will not be processed!");
+                return;
+            }
+            else
+            {
+                PrintWarning($"Mod '{modId}' edits nex table '{nexGamePath}' which is unrecognized. Using the locale file '{localeFile}' as fallback!");
+                nexGamePath = localeFile;
+            }
         }
 
         MemoryOwner<byte>? ogNexFileData = null;
@@ -461,13 +514,8 @@ public class FF16ModPackManager : IFF16ModPackManager
                 string nexGamePath = $"nxd/{nexFile.Key}.nxd";
 
                 // Start by building the file from its original data
-                NexTableLayout tableColumnLayout = TableMappingReader.ReadTableLayout(nexFile.Key, new Version(1, 0, 0));
-
-                // Not my finest work
-                string ogPackName = nexPack.Key.Replace(".diff", string.Empty);
-                using MemoryOwner<byte> ogNexFileData = PackManager!.GetFileInfoFromPack(nexGamePath, ogPackName) is not null ?
-                    PackManager.GetFileDataFromPack(nexGamePath, ogPackName) :
-                    PackManager.GetFileData(nexGamePath, includeDiff: false);
+                NexTableLayout tableColumnLayout = TableMappingReader.ReadTableLayout(nexFile.Key, new Version(1, 0, 0), "faith");
+                using MemoryOwner<byte> ogNexFileData = PackManager.GetFileData(nexGamePath, includeDiff: false);
 
                 NexDataFile originalTableFile = new NexDataFile();
                 originalTableFile.Read(ogNexFileData.Span.ToArray());

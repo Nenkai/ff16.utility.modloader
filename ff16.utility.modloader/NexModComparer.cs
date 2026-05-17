@@ -22,7 +22,7 @@ public class NexModComparer
     {
         _nexChanges.TryAdd(diffPackName, []);
 
-        NexTableLayout tableColumnLayout = TableMappingReader.ReadTableLayout(tableName, new Version(1, 0, 0));
+        NexTableLayout tableColumnLayout = TableMappingReader.ReadTableLayout(tableName, new Version(1, 0, 0), "faith");
 
         List<NexRowInfo> ogRowInfos = originalNexTable.RowManager!.GetAllRowInfos();
         for (int i = 0; i < ogRowInfos.Count; i++)
@@ -106,10 +106,11 @@ public class NexModComparer
                 return (long)left == (long)right;
             case NexColumnType.String:
                 return string.Equals((string)left, (string)right);
-            case NexColumnType.Union:
+            case NexColumnType.NexUnionKey32:
+            case NexColumnType.NexUnionKey16:
                 {
-                    var leftUnion = (NexUnion)left;
-                    var rightUnion = (NexUnion)right;
+                    var leftUnion = (NexUnionKey)left;
+                    var rightUnion = (NexUnionKey)right;
                     return leftUnion.Type == rightUnion.Type && leftUnion.Value == rightUnion.Value;
                 }
             case NexColumnType.ByteArray:
@@ -176,10 +177,10 @@ public class NexModComparer
 
                     return true;
                 }
-            case NexColumnType.UnionArray:
+            case NexColumnType.NexUnionKey32Array:
                 {
-                    NexUnion[] leftArray = (NexUnion[])left;
-                    NexUnion[] rightArray = (NexUnion[])right;
+                    NexUnionKey[] leftArray = (NexUnionKey[])left;
+                    NexUnionKey[] rightArray = (NexUnionKey[])right;
 
                     if (leftArray.Length != rightArray.Length)
                         return false;
